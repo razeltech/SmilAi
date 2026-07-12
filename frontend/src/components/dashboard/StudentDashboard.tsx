@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { BookOpen, Code, FileText, Send, Mic, MicOff, Volume2, VolumeX, CheckCircle, HelpCircle, Award, BarChart2, ShieldAlert, Cpu, Settings, Info, Layers } from 'lucide-react';
+import ReactMarkdown from 'react-markdown';
 import { Subject, User, ChatSession, ChatMessage, Assessment, Assignment, StudentRecord } from '../../types';
 
 interface StudentDashboardProps {
@@ -31,9 +32,6 @@ export default function StudentDashboard({ user, subject }: StudentDashboardProp
   const [inputMsg, setInputMsg] = useState('');
   const [subjectDocs, setSubjectDocs] = useState<any[]>([]);
   const [selectedDocId, setSelectedDocId] = useState<string>('all');
-  const [useOllama, setUseOllama] = useState(false);
-  const [ollamaUrl, setOllamaUrl] = useState('http://localhost:11434');
-  const [ollamaModel, setOllamaModel] = useState('deepseek-r1:1.5b');
   const [warmVoice, setWarmVoice] = useState(true);
   const [activeCitation, setActiveCitation] = useState<{ tag: string; text: string; id: string } | null>(null);
 
@@ -42,6 +40,12 @@ export default function StudentDashboard({ user, subject }: StudentDashboardProp
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [speechEnabled, setSpeechEnabled] = useState(true);
   const recognitionRef = useRef<any>(null);
+  
+  // AI Voice State
+  const [voiceEngineMode, setVoiceEngineMode] = useState<'smiley' | 'robotic'>('smiley');
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const mediaRecorderRef = useRef<any>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
 
   // 2. Code Grader States
   const [assignments, setAssignments] = useState<Assignment[]>([]);
@@ -65,10 +69,11 @@ export default function StudentDashboard({ user, subject }: StudentDashboardProp
       // Chat Sessions
       const sessRes = await fetch(`/v1/chat/sessions?userId=${user.id}&subjectId=${subject.id}`);
       const sessData = await sessRes.json();
-      setSessions(sessData);
-      if (sessData.length > 0) {
-        setCurrentSessionId(sessData[0].id);
-        fetchSessionMessages(sessData[0].id);
+      const safeSessions = Array.isArray(sessData) ? sessData : [];
+      setSessions(safeSessions);
+      if (safeSessions.length > 0) {
+        setCurrentSessionId(safeSessions[0].id);
+        fetchSessionMessages(safeSessions[0].id);
       } else {
         setMessages([]);
         setCurrentSessionId('');
@@ -182,83 +187,171 @@ export default function StudentDashboard({ user, subject }: StudentDashboardProp
     }
   }, []);
 
-  const toggleRecording = () => {
+  const toggleRecording = async () => {
     setError('');
-    if (!recognitionRef.current) {
-      setError('Speech Recognition is not supported or permitted in this browser.');
-      return;
-    }
-
-    if (isRecording) {
-      recognitionRef.current.stop();
+    
+    if (voiceEngineMode === 'smiley') {
+      if (isRecording) {
+        if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
+          mediaRecorderRef.current.stop();
+        }
+        setIsRecording(false);
+      } else {
+        try {
+          const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+          const mediaRecorder = new MediaRecorder(stream);
+          mediaRecorderRef.current = mediaRecorder;
+          audioChunksRef.current = [];
+          
+          mediaRecorder.ondataavailable = (event) => {
+            if (event.data.size > 0) {
+              audioChunksRef.current.push(event.data);
+            }
+          };
+          
+          mediaRecorder.onstop = async () => {
+            const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+            
+            // Send to backend
+            const formData = new FormData();
+            formData.append('file', audioBlob, 'recording.webm');
+            
+            setLoading(true);
+            try {
+              const res = await fetch('/v1/voice/transcribe', {
+                method: 'POST',
+                body: formData
+              });
+              const data = await res.json();
+              if (data.text) {
+                setInputMsg(prev => (prev ? prev + ' ' + data.text : data.text));
+              }
+            } catch (err) {
+              setError('Failed to transcribe audio via Smiley AI Voice.');
+            } finally {
+              setLoading(false);
+            }
+            
+            // Stop tracks
+            stream.getTracks().forEach(track => track.stop());
+          };
+          
+          mediaRecorder.start();
+          setIsRecording(true);
+        } catch (err) {
+          setError('Microphone permission blocked or unavailable.');
+        }
+      }
     } else {
-      if (window.speechSynthesis) window.speechSynthesis.cancel();
-      try {
-        recognitionRef.current.start();
-      } catch (err: any) {
-        console.error('Failed to start speech recognition:', err);
-        setError('Microphone state is busy. Please try clicking again in a second.');
+      // Legacy Web Speech API
+      if (!recognitionRef.current) {
+        setError('Speech Recognition is not supported or permitted in this browser.');
+        return;
+      }
+
+      if (isRecording) {
+        recognitionRef.current.stop();
+      } else {
+        if (window.speechSynthesis) window.speechSynthesis.cancel();
+        try {
+          recognitionRef.current.start();
+        } catch (err: any) {
+          console.error('Failed to start speech recognition:', err);
+          setError('Microphone state is busy. Please try clicking again in a second.');
+        }
       }
     }
   };
 
-  // Perform browser TTS Speech synthesis (100% offline!)
-  const speakText = (text: string) => {
-    if (!window.speechSynthesis || !speechEnabled) return;
-    window.speechSynthesis.cancel(); // cancel any active speaking
-
-    const cleanText = text.replace(/[#*`_\[\]]/g, '').substring(0, 300); // limit to first 300 chars for clean playback
-    const utterance = new SpeechSynthesisUtterance(cleanText);
-
-    // Look for a humanic female voice
-    const voices = window.speechSynthesis.getVoices();
-    let selectedVoice = null;
+  // Perform browser TTS Speech synthesis or Smiley AI Voice
+  const speakText = async (text: string) => {
+    if (!speechEnabled) return;
     
-    // Prefer high-quality female voices
-    const preferredNames = [
-      'google uk english female', 
-      'google us english', 
-      'microsoft zira', 
-      'microsoft neerja', 
-      'samantha',
-      'karen',
-      'moira',
-      'veena'
-    ];
+    // Cancel existing
+    if (window.speechSynthesis) window.speechSynthesis.cancel();
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current = null;
+    }
+    setIsSpeaking(false);
     
-    for (const name of preferredNames) {
-      const match = voices.find(v => v.name.toLowerCase().includes(name));
-      if (match) {
-        selectedVoice = match;
-        break;
+    // Strip markdown formatting, LaTeX brackets, AND all unicode emojis before speaking
+    const cleanText = text
+      .replace(/[#*`_\[\]\\\(\)]/g, '')
+      .replace(/[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F700}-\u{1F77F}\u{1F780}-\u{1F7FF}\u{1F800}-\u{1F8FF}\u{1F900}-\u{1F9FF}\u{1FA00}-\u{1FA6F}\u{1FA70}-\u{1FAFF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]/gu, '');
+      
+    if (voiceEngineMode === 'smiley') {
+      setIsSpeaking(true);
+      try {
+        const res = await fetch(`/v1/voice/speak?text=${encodeURIComponent(cleanText)}`, {
+          method: 'POST'
+        });
+        if (res.ok) {
+          const audioBlob = await res.blob();
+          const url = URL.createObjectURL(audioBlob);
+          const audio = new Audio(url);
+          audioRef.current = audio;
+          
+          audio.onended = () => setIsSpeaking(false);
+          audio.onerror = () => setIsSpeaking(false);
+          
+          await audio.play();
+        } else {
+          setIsSpeaking(false);
+          setError("Smiley's Voice Engine failed to synthesize audio.");
+        }
+      } catch (err) {
+        setIsSpeaking(false);
+        setError("Failed to connect to Smiley's Voice Engine.");
       }
-    }
-    
-    // Fallbacks
-    if (!selectedVoice) {
-      selectedVoice = voices.find(v => v.name.toLowerCase().includes('female') && v.lang.startsWith('en')) 
-        || voices.find(v => v.lang.includes('en-IN') && v.name.toLowerCase().includes('female'))
-        || voices.find(v => v.lang.includes('en-GB') && v.name.toLowerCase().includes('female'))
-        || voices.find(v => v.lang.includes('en-IN') || v.name.toLowerCase().includes('india') || v.lang.includes('en-GB'));
-    }
-
-    if (selectedVoice) {
-      utterance.voice = selectedVoice;
-    }
-    
-    if (warmVoice) {
-      utterance.rate = 0.82; // Slightly slower, highly comforting & patient paced teaching
-      utterance.pitch = 1.08; // Softer, encouraging tone
     } else {
-      utterance.rate = 1.0;
-      utterance.pitch = 1.0;
+      const truncatedText = cleanText.substring(0, 300); // limit to first 300 chars for clean playback
+      const utterance = new SpeechSynthesisUtterance(truncatedText);
+
+      // Look for a humanic female voice
+      const voices = window.speechSynthesis.getVoices();
+      let selectedVoice = null;
+      
+      const preferredNames = [
+        'microsoft neerja', 'veena', 'google hi-in english female', 
+        'google हिन्दी', 'microsoft heera', 'google uk english female',
+        'microsoft zira', 'samantha'
+      ];
+      
+      for (const name of preferredNames) {
+        const match = voices.find(v => v.name.toLowerCase().includes(name));
+        if (match) {
+          selectedVoice = match;
+          break;
+        }
+      }
+      
+      if (!selectedVoice) {
+        selectedVoice = voices.find(v => v.lang.includes('en-IN') && v.name.toLowerCase().includes('female'))
+          || voices.find(v => v.lang.includes('en-IN'))
+          || voices.find(v => v.name.toLowerCase().includes('india'))
+          || voices.find(v => v.name.toLowerCase().includes('female') && v.lang.startsWith('en')) 
+          || voices.find(v => v.lang.startsWith('en'));
+      }
+
+      if (selectedVoice) {
+        utterance.voice = selectedVoice;
+      }
+      
+      if (warmVoice) {
+        utterance.rate = 0.85; 
+        utterance.pitch = 1.15; 
+      } else {
+        utterance.rate = 1.0;
+        utterance.pitch = 1.0;
+      }
+
+      utterance.onstart = () => setIsSpeaking(true);
+      utterance.onend = () => setIsSpeaking(false);
+      utterance.onerror = () => setIsSpeaking(false);
+
+      window.speechSynthesis.speak(utterance);
     }
-
-    utterance.onstart = () => setIsSpeaking(true);
-    utterance.onend = () => setIsSpeaking(false);
-    utterance.onerror = () => setIsSpeaking(false);
-
-    window.speechSynthesis.speak(utterance);
   };
 
   // 1. Chat actions
@@ -297,6 +390,8 @@ export default function StudentDashboard({ user, subject }: StudentDashboardProp
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          session_id: currentSessionId || 'new',
+          user_id: user.id,
           subject_id: subject.id,
           message: userText
         })
@@ -526,7 +621,7 @@ export default function StudentDashboard({ user, subject }: StudentDashboardProp
                 </div>
 
                 <div className="space-y-1 overflow-y-auto max-h-48 lg:max-h-64">
-                  {sessions.length === 0 ? (
+                  {(!Array.isArray(sessions) || sessions.length === 0) ? (
                     <div className="text-xs text-slate-400 text-center py-6">No previous chats. Start by asking below!</div>
                   ) : (
                     sessions.map(s => (
@@ -546,55 +641,6 @@ export default function StudentDashboard({ user, subject }: StudentDashboardProp
                   )}
                 </div>
               </div>
-
-              {/* Ollama Local LLM Configuration Panel */}
-              <div className="bg-slate-50 p-3 rounded-xl border border-slate-200/60 space-y-3">
-                <div className="flex items-center gap-2 justify-between">
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1">
-                    <Cpu className="h-3.5 w-3.5 text-teal-600 animate-pulse" /> Local Ollama
-                  </span>
-                  <label className="relative inline-flex items-center cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={useOllama}
-                      onChange={(e) => setUseOllama(e.target.checked)}
-                      className="sr-only peer"
-                    />
-                    <div className="w-8 h-4 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-teal-600"></div>
-                  </label>
-                </div>
-                {useOllama ? (
-                  <div className="space-y-2 pt-1 text-xs">
-                    <div>
-                      <label className="block text-[9px] font-semibold text-slate-400 uppercase tracking-wide">Ollama URL</label>
-                      <input
-                        type="text"
-                        value={ollamaUrl}
-                        onChange={(e) => setOllamaUrl(e.target.value)}
-                        className="w-full text-xs px-2 py-1 border border-slate-200 rounded bg-white focus:outline-none focus:ring-1 focus:ring-teal-500"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-[9px] font-semibold text-slate-400 uppercase tracking-wide">Model Name</label>
-                      <input
-                        type="text"
-                        value={ollamaModel}
-                        onChange={(e) => setOllamaModel(e.target.value)}
-                        placeholder="deepseek-r1:1.5b"
-                        className="w-full text-xs px-2 py-1 border border-slate-200 rounded bg-white focus:outline-none focus:ring-1 focus:ring-teal-500"
-                      />
-                    </div>
-                    <p className="text-[9px] text-slate-500 leading-normal flex items-start gap-1">
-                      <Info className="h-3 w-3 text-teal-600 shrink-0 mt-0.5" />
-                      <span>Queries route through local Ollama server. Keep Ollama app active.</span>
-                    </p>
-                  </div>
-                ) : (
-                  <p className="text-[9px] text-slate-400 leading-normal">
-                    Using cloud simulation mode. Toggle above to connect your workstation's local model.
-                  </p>
-                )}
-              </div>
             </div>
 
             {/* Chat Box */}
@@ -606,6 +652,17 @@ export default function StudentDashboard({ user, subject }: StudentDashboardProp
                   <span className="text-sm font-bold text-slate-800">Chatting with SmilAI</span>
                 </div>
                 <div className="flex items-center gap-3">
+                  {/* Voice Engine Toggle */}
+                  <select
+                    value={voiceEngineMode}
+                    onChange={(e) => setVoiceEngineMode(e.target.value as 'smiley' | 'robotic')}
+                    className="bg-white border border-slate-200 rounded px-2 py-1 text-xs text-slate-700 focus:outline-none focus:ring-1 focus:ring-teal-500 cursor-pointer shadow-sm"
+                    title="Select Voice Backend Engine"
+                  >
+                    <option value="smiley">SmilAI Voice Engine (Backend)</option>
+                    <option value="robotic">Native Browser Voice (Frontend)</option>
+                  </select>
+                  
                   {/* Warm Voice Mode Toggle */}
                   {speechEnabled && (
                     <button
@@ -676,7 +733,9 @@ export default function StudentDashboard({ user, subject }: StudentDashboardProp
                           ? 'bg-teal-600 text-white rounded-tr-none' 
                           : 'bg-slate-50 border border-slate-100 text-slate-800 rounded-tl-none'
                       }`}>
-                        <div>{msg.content}</div>
+                        <div className="prose prose-sm prose-teal max-w-none">
+                          <ReactMarkdown>{msg.content}</ReactMarkdown>
+                        </div>
                         {msg.citations && msg.citations.length > 0 && (
                           <div className="mt-3 pt-2.5 border-t border-slate-200/50 space-y-1.5">
                             <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Syllabus Grounding:</span>
@@ -1202,6 +1261,43 @@ export default function StudentDashboard({ user, subject }: StudentDashboardProp
                     <p className="mt-1 leading-relaxed text-slate-500 text-[11px]">
                       Under CBSE and AP SCERT registry guidelines, student profile corrections require parent/guardian verification and can only be updated by the Administrative Office.
                     </p>
+                  </div>
+                </div>
+              </div>
+              
+              <div className="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-sm mt-6">
+                <h3 className="text-sm font-bold text-slate-900 mb-6 pb-3 border-b border-slate-100 flex justify-between items-center">
+                  <span>Voice Settings</span>
+                </h3>
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between p-4 rounded-xl border border-slate-100 hover:bg-slate-50 transition-colors cursor-pointer" onClick={() => setVoiceEngineMode('smiley')}>
+                    <div className="flex items-center gap-3">
+                      <div className={`p-2 rounded-lg ${voiceEngineMode === 'smiley' ? 'bg-teal-100 text-teal-600' : 'bg-slate-100 text-slate-400'}`}>
+                        <Volume2 className="h-5 w-5" />
+                      </div>
+                      <div>
+                        <div className="font-bold text-slate-800 text-sm">Smiley's Voice (High-Fidelity AI)</div>
+                        <div className="text-xs text-slate-500 mt-0.5">Warm, patient, and highly expressive offline AI.</div>
+                      </div>
+                    </div>
+                    <div className={`h-5 w-5 rounded-full border-2 flex items-center justify-center ${voiceEngineMode === 'smiley' ? 'border-teal-500' : 'border-slate-300'}`}>
+                      {voiceEngineMode === 'smiley' && <div className="h-2.5 w-2.5 rounded-full bg-teal-500" />}
+                    </div>
+                  </div>
+                  
+                  <div className="flex items-center justify-between p-4 rounded-xl border border-slate-100 hover:bg-slate-50 transition-colors cursor-pointer" onClick={() => setVoiceEngineMode('robotic')}>
+                    <div className="flex items-center gap-3">
+                      <div className={`p-2 rounded-lg ${voiceEngineMode === 'robotic' ? 'bg-slate-200 text-slate-700' : 'bg-slate-100 text-slate-400'}`}>
+                        <Cpu className="h-5 w-5" />
+                      </div>
+                      <div>
+                        <div className="font-bold text-slate-800 text-sm">Robotic Voice (Basic Browser)</div>
+                        <div className="text-xs text-slate-500 mt-0.5">Standard OS-level fallback TTS engine.</div>
+                      </div>
+                    </div>
+                    <div className={`h-5 w-5 rounded-full border-2 flex items-center justify-center ${voiceEngineMode === 'robotic' ? 'border-slate-500' : 'border-slate-300'}`}>
+                      {voiceEngineMode === 'robotic' && <div className="h-2.5 w-2.5 rounded-full bg-slate-500" />}
+                    </div>
                   </div>
                 </div>
               </div>

@@ -13,13 +13,26 @@ export default function App() {
   const [selectedSubject, setSelectedSubject] = useState<Subject | null>(null);
   const [orgSettings, setOrgSettings] = useState<any>(null);
 
+  const [isInitializing, setIsInitializing] = useState(true);
+
+  const fetchWithRetry = async (url: string, retries = 5, delay = 1000): Promise<Response> => {
+    for (let i = 0; i < retries; i++) {
+      try {
+        const res = await fetch(url);
+        if (res.ok) return res;
+      } catch (err) {
+        // Network error (ECONNREFUSED from proxy)
+      }
+      if (i < retries - 1) await new Promise(resolve => setTimeout(resolve, delay));
+    }
+    throw new Error('Backend unavailable after retries');
+  };
+
   const fetchOrgSettings = async () => {
     try {
-      const res = await fetch('/v1/org-settings');
-      if (res.ok) {
-        const data = await res.json();
-        setOrgSettings(data);
-      }
+      const res = await fetchWithRetry('/v1/org-settings');
+      const data = await res.json();
+      setOrgSettings(data);
     } catch (err) {
       console.error('Failed to fetch org settings:', err);
     }
@@ -27,29 +40,31 @@ export default function App() {
 
   // Check if session exists in localStorage for immediate offline-first load
   useEffect(() => {
-    fetchOrgSettings();
-    const cachedUser = localStorage.getItem('smilai_user');
-    if (cachedUser) {
-      const u = JSON.parse(cachedUser);
-      setUser(u);
-      fetchSubjects(u);
-    }
+    const init = async () => {
+      await fetchOrgSettings();
+      const cachedUser = localStorage.getItem('smilai_user');
+      if (cachedUser) {
+        const u = JSON.parse(cachedUser);
+        setUser(u);
+        await fetchSubjects(u);
+      }
+      setIsInitializing(false);
+    };
+    init();
   }, []);
 
   const fetchSubjects = async (u: User) => {
     try {
-      const res = await fetch(`/v1/subjects?userId=${u.id}&role=${u.role}`);
-      if (res.ok) {
-        const data = await res.json();
-        setSubjects(data);
-        if (data.length > 0) {
-          // Find default mathematical subject for Sharma or first
-          if (u.role === 'teacher') {
-            const teachSub = data.find((s: Subject) => s.teacherId === u.id);
-            setSelectedSubject(teachSub || data[0]);
-          } else {
-            setSelectedSubject(data[0]);
-          }
+      const res = await fetchWithRetry(`/v1/subjects?userId=${u.id}&role=${u.role}`);
+      const data = await res.json();
+      setSubjects(data);
+      if (data.length > 0) {
+        // Find default mathematical subject for Sharma or first
+        if (u.role === 'teacher') {
+          const teachSub = data.find((s: Subject) => s.teacherId === u.id);
+          setSelectedSubject(teachSub || data[0]);
+        } else {
+          setSelectedSubject(data[0]);
         }
       }
     } catch (err) {
@@ -71,6 +86,16 @@ export default function App() {
     localStorage.removeItem('smilai_user');
     if (window.speechSynthesis) window.speechSynthesis.cancel();
   };
+
+  if (isInitializing) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center font-sans">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-teal-600 mb-4"></div>
+        <h2 className="text-xl text-slate-700 font-semibold">Connecting to SmilAI Brain...</h2>
+        <p className="text-slate-500 mt-2 text-sm">Loading AI models and local database (usually takes a few seconds)</p>
+      </div>
+    );
+  }
 
   if (!user) {
     return <Auth onLoginSuccess={handleLoginSuccess} />;

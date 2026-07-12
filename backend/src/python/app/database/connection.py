@@ -40,29 +40,33 @@ def init_db():
         org = conn.execute("SELECT id FROM organizations LIMIT 1").fetchone()
         if not org:
             import uuid
-            import bcrypt
-            
-            def hash_password(password: str) -> str:
-                salt = bcrypt.gensalt()
-                return bcrypt.hashpw(password.encode('utf-8'), salt).decode('utf-8')
+            try:
+                import bcrypt
+                def hash_password(password: str) -> str:
+                    salt = bcrypt.gensalt()
+                    return bcrypt.hashpw(password.encode('utf-8'), salt).decode('utf-8')
+            except ImportError:
+                def hash_password(password: str) -> str:
+                    # Insecure fallback ONLY if bcrypt is missing (e.g. lightweight install)
+                    return f"mock_hash_{password}"
                 
-            org_id = str(uuid.uuid4())
+            org_id = "org_1"
             conn.execute("INSERT INTO organizations (id, name) VALUES (?, ?)", (org_id, "SmilAI Demo School"))
             
             pwd = hash_password("password")
-            conn.execute("INSERT INTO users (id, name, email, password, role, org_id) VALUES (?, ?, ?, ?, ?, ?)", (str(uuid.uuid4()), "Rahul Kumar", "rahul@school.org", pwd, "student", org_id))
-            conn.execute("INSERT INTO users (id, name, email, password, role, org_id) VALUES (?, ?, ?, ?, ?, ?)", (str(uuid.uuid4()), "Mr. Sharma", "sharma@school.org", pwd, "teacher", org_id))
+            student_id = "student_rahul"
+            teacher_id = "teacher_sharma"
+            conn.execute("INSERT INTO users (id, name, email, password, role, org_id) VALUES (?, ?, ?, ?, ?, ?)", (student_id, "Rahul Kumar", "rahul@school.org", pwd, "student", org_id))
+            conn.execute("INSERT INTO users (id, name, email, password, role, org_id) VALUES (?, ?, ?, ?, ?, ?)", (teacher_id, "Mr. Sharma", "sharma@school.org", pwd, "teacher", org_id))
             conn.execute("INSERT INTO users (id, name, email, password, role, org_id) VALUES (?, ?, ?, ?, ?, ?)", (str(uuid.uuid4()), "School Administrator", "admin@school.org", pwd, "admin", org_id))
             
-            # Seed a default subject for Rahul and Sharma
-            grade_band_id = str(uuid.uuid4())
-            conn.execute("INSERT INTO grade_bands (id, org_id, name) VALUES (?, ?, ?)", (grade_band_id, org_id, "Grade 1"))
+            # Seed a default subject for Rahul and Sharma using a deterministic ID
+            grade_band_id = "grade_10"
+            conn.execute("INSERT INTO grade_bands (id, org_id, name) VALUES (?, ?, ?)", (grade_band_id, org_id, "Grade 10"))
             
-            teacher_id = conn.execute("SELECT id FROM users WHERE email = 'sharma@school.org'").fetchone()["id"]
-            subject_id = str(uuid.uuid4())
-            conn.execute("INSERT INTO subjects (id, org_id, grade_band_id, name, teacher_id) VALUES (?, ?, ?, ?, ?)", (subject_id, org_id, grade_band_id, "Mathematics", teacher_id))
+            subject_id = "math_101"
+            conn.execute("INSERT INTO subjects (id, org_id, grade_band_id, name, teacher_id) VALUES (?, ?, ?, ?, ?)", (subject_id, org_id, grade_band_id, "Advanced Mathematics", teacher_id))
             
-            student_id = conn.execute("SELECT id FROM users WHERE email = 'rahul@school.org'").fetchone()["id"]
             conn.execute("INSERT INTO enrollments (user_id, subject_id) VALUES (?, ?)", (student_id, subject_id))
             
             print("Database seeded with demo accounts and sample subjects.")

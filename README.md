@@ -1,72 +1,119 @@
 # SmilAI — Offline Virtual-Teacher & Assessment Platform
 
-> **🤖 AI SYSTEM NOTICE (READ FIRST)**
-> If you are an AI assistant opening this project for the first time, you MUST read the following files before taking any action or writing any code:
-> 1. `docs/SmilAI_rules.md` (Persona, Branding, and strict Architectural rules)
-> 2. `docs/implementation_plan.md` (Timeline, Phases, and current status)
-> 3. `docs/EXPECTED_OUTCOMES.md` (User flows and expectations)
-> Failure to read these files will result in violating project constraints.
+> **Powered by Razel Tech** 🇮🇳 | 100% Offline | LAN-Deployable | Voice Interactive
 
-SmilAI is a fully offline virtual-teacher platform designed for local network deployment. It empowers institutions to set up personalized, infinite-patience virtual mentors (teachers) scoped to specific subject syllabi, textbooks, and grading rubrics.
+SmilAI is a fully offline virtual-teacher platform designed for local network deployment in government and private schools. It empowers institutions to set up personalized, infinite-patience virtual mentors (teachers) scoped to specific subject syllabi, textbooks, and grading rubrics.
 
-This repository is split cleanly into a `frontend/` (React + Vite) and `backend/` (Python + FastAPI).
+---
+
+## Architecture
+
+```
+smilai/
+├── frontend/          # React 19 + Vite + TailwindCSS v4
+│   └── src/
+│       ├── App.tsx
+│       ├── components/
+│       │   ├── common/     (Auth, Header, Footer)
+│       │   └── dashboard/  (Student, Teacher, Admin dashboards)
+│       └── types.ts
+├── backend/           # Python 3.11+ FastAPI
+│   └── src/python/app/
+│       ├── main.py         (FastAPI app + lifespan)
+│       ├── api/            (auth, chat, content, assessments, voice, admin)
+│       ├── database/       (connection.py, vector_db.py, schema.sql)
+│       └── rag/            (ingest, retrieve, inference, coding_brain)
+├── docs/              # PRD, SRS, Rules, Phase Plans
+├── start.bat          # One-click launcher (Ollama + Backend + Frontend)
+└── .env.example       # Environment configuration template
+```
+
+---
+
+## Quick Start
+
+### Prerequisites
+- **Python 3.11+** with a virtual environment in `backend/.venv`
+- **Node.js 18+** with npm
+- **Ollama** installed and a model pulled (e.g., `ollama pull qwen2.5:7b`)
+
+### 1. Clone & Install
+```bash
+git clone https://github.com/razeltech/SmilAi.git
+cd SmilAi
+
+# Backend
+cd backend
+python -m venv .venv
+.venv\Scripts\activate        # Windows
+pip install fastapi uvicorn bcrypt pyjwt pydantic[email] httpx chromadb sentence-transformers rank-bm25 PyMuPDF
+
+# Frontend
+cd ../frontend
+npm install
+```
+
+### 2. Launch Everything
+```bash
+# From the project root:
+.\start.bat
+```
+This starts **Ollama**, the **FastAPI backend** (port 8000), and the **Vite dev server** (port 5173).
+
+### 3. Demo Accounts
+The database auto-seeds with these accounts (password: `password`):
+
+| Role | Email | Name |
+|------|-------|------|
+| Student | `rahul@school.org` | Rahul Kumar |
+| Teacher | `sharma@school.org` | Mr. Sharma |
+| Admin | `admin@school.org` | School Administrator |
+
+---
+
+## Core Features
+
+- **Staged Hybrid RAG**: SQL pre-filter → ChromaDB vector search → Cross-Encoder reranking
+- **Streaming Chat** (SSE): Humanized latency with filler phrases while RAG processes
+- **Voice Interaction**: Browser STT (Speech-to-Text) + TTS (Text-to-Speech), 100% offline
+- **Assessment Generation**: Auto-generates MCQ quizzes from uploaded curriculum PDFs
+- **Code Grading**: Static AST analysis + LLM rubric feedback (no code execution)
+- **Multi-tenant**: All data scoped by `org_id` and `subject_id`
 
 ---
 
 ## 💾 Saving C-Drive Space: Storing Ollama Models Inside Project Folder
 
-If you are running Ollama locally but have low storage space on your C: drive, you can force Ollama to store its downloaded LLM weights directly inside the project directory (or an external drive). 
+Force Ollama to store models in the project directory:
 
-To do this, we configure Ollama's model storage path to a local folder named `.models` (which is added to `.gitignore` to prevent committing gigabytes of weights).
-
-### Configuration Steps
-
-#### On Windows (PowerShell / Command Prompt)
-Before starting Ollama, set the `OLLAMA_MODELS` environment variable pointing to your project subdirectory:
 ```powershell
 # PowerShell
-$env:OLLAMA_MODELS = "C:\path\to\your\smilai\project\.models"
-ollama serve
-
-# Command Prompt
-set OLLAMA_MODELS=C:\path\to\your\smilai\project\.models
+$env:OLLAMA_MODELS = "D:\ReactApps2Git\smilai\.models"
 ollama serve
 ```
 
-#### On macOS & Linux (Terminal)
-```bash
-export OLLAMA_MODELS="/path/to/your/smilai/project/.models"
-ollama serve
-```
+---
 
-When you run `ollama pull llama3` or `ollama pull gemma2`, the model weights will download straight into your project's `.models/` folder instead of filling up your system disk.
+## API Documentation
+
+With the backend running, visit: **http://localhost:8000/docs** for the interactive Swagger UI.
+
+Key endpoints:
+- `POST /v1/auth/login` — JWT authentication
+- `POST /v1/chat/stream` — Streaming RAG chat
+- `GET /v1/subjects` — List subjects by user role
+- `POST /v1/content/upload` — Teacher PDF upload
+- `POST /v1/assessments/generate` — Auto-generate quizzes
+- `POST /v1/coding/analyze` — Static code grading
 
 ---
 
-## 🔍 Google-Grade RAG: Offline Hybrid Search (BM25 + Vector)
+## Documentation
 
-To maximize accuracy under fully offline constraints without paid APIs, SmilAI uses **Hybrid Search**. This technique matches Google's retrieval strategies by combining:
-
-1. **Keyword-Based BM25 / TF-IDF Retrieval**: Excels at finding exact terms, names, code functions, and mathematical formulas (critical for maths, coding, and science).
-2. **Dense Semantic Embedding Distance**: Captures conceptual meaning, synonyms, and phrasing variations.
-3. **Reciprocal Rank Fusion (RRF)**: Re-ranks and merges the results of both search strategies into a single high-quality context stream for the local LLM.
-
-SQLite's Full-Text Search (`FTS5`) serves as the ultra-light keyword engine, while the local embedding database acts as the semantic engine.
-
----
-
-## 🛠️ Code Parsers & OCR Ingestion Pipelines
-
-To keep shared modules clean, SmilAI implements a centralized **Parser Registry Pattern**. All documents pass through specialized extractors:
-
-*   **Python Code Parser (`PythonParser`)**: Extracts AST structures, classes, functions, and docstrings so the teacher understands code semantics rather than treating it as raw text.
-*   **C / C++ Code Parser (`CppParser`)**: Isolates preprocessor directives, structs, function headers, and class definitions to provide precise context in the knowledge base.
-*   **OCR PDF/Image Ingestion (`OCRParser`)**: Employs Tesseract/local extraction to parse scanned textbook pages, diagrams, or printed exam sheets, flagging low-confidence blocks for human teacher auditing.
-
----
-
-## 🚀 Porting to Python (FastAPI + SQLite)
-
-When you download this project as a ZIP to run on your local RTX 3060 server, you can continue development directly on our Express backend or easily transition to Python (FastAPI) using the blueprint files provided in this repository.
-
-A parallel Python server skeleton (`server.py`) is already included to jumpstart your transition to Python-based offline adapters!
+| Document | Purpose |
+|----------|---------|
+| [SmilAI_rules.md](docs/SmilAI_rules.md) | Architecture rules & non-negotiables |
+| [SmilAI_PRD.md](docs/SmilAI_PRD.md) | Product Requirements Document |
+| [SmilAI_SRS.md](docs/SmilAI_SRS.md) | Software Requirements Specification |
+| [EXPECTED_OUTCOMES.md](docs/EXPECTED_OUTCOMES.md) | Vision & user scenarios |
+| [SmilAI_PHASE_PLAN.md](docs/SmilAI_PHASE_PLAN.md) | Development phases & timeline |

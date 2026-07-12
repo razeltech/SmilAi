@@ -35,10 +35,19 @@ export default function Auth({ onLoginSuccess }: AuthProps) {
 
       const data = await res.json();
       if (!res.ok) {
-        throw new Error(data.error || 'Authentication failed');
+        throw new Error(data.detail || data.error || 'Authentication failed');
       }
 
-      onLoginSuccess(data);
+      // Map response to the frontend User type (handles both camelCase and snake_case)
+      const user: User = {
+        id: data.id,
+        name: data.name,
+        email: data.email,
+        role: data.role,
+        orgId: data.orgId || data.org_id || '',
+      };
+
+      onLoginSuccess(user);
     } catch (err: any) {
       setError(err.message);
     } finally {

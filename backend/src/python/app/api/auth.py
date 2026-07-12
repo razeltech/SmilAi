@@ -57,9 +57,9 @@ def register(user: UserCreate, db: Connection = Depends(get_db)):
         org_id=user.org_id
     )
 
-@router.post("/login", response_model=Token)
+@router.post("/login")
 def login(credentials: UserLogin, db: Connection = Depends(get_db)):
-    """Authenticates a user and returns a JWT token."""
+    """Authenticates a user and returns a JWT token + user profile in camelCase."""
     user = db.execute("SELECT * FROM users WHERE email = ?", (credentials.email,)).fetchone()
     
     if not user or not verify_password(credentials.password, user["password"]):
@@ -69,6 +69,8 @@ def login(credentials: UserLogin, db: Connection = Depends(get_db)):
         )
 
     access_token = create_access_token(data={"sub": user["email"], "id": user["id"], "role": user["role"]})
+    
+    # Return camelCase keys matching the frontend User type exactly
     return {
         "access_token": access_token, 
         "token_type": "bearer",
@@ -76,25 +78,5 @@ def login(credentials: UserLogin, db: Connection = Depends(get_db)):
         "name": user["name"],
         "email": user["email"],
         "role": user["role"],
-        "org_id": user["org_id"]
-    }
-
-@router.get("/users/{user_id}/profile")
-def get_user_profile(user_id: str, db: Connection = Depends(get_db)):
-    """Fetches public profile data for a user."""
-    user = db.execute("SELECT id, name, email, role, org_id FROM users WHERE id = ?", (user_id,)).fetchone()
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-    
-    # Return mock profile data since we don't have a profile table yet
-    return {
-        "id": user["id"],
-        "name": user["name"],
-        "email": user["email"],
-        "role": user["role"],
-        "org_id": user["org_id"],
-        "phone": "+91 9876543210",
-        "bio": "Enthusiastic learner focusing on Science and Math.",
-        "grade": "10th",
-        "board": "AP State Board"
+        "orgId": user["org_id"]
     }
