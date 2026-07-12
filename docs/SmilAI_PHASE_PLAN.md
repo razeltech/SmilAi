@@ -1,12 +1,12 @@
 # SmilAI — Phase Execution Plan
 
-**Purpose of this document:** Gemini (or any AI builder) hallucinates most when given
+**Purpose of this document:** AI (or any AI builder) hallucinates most when given
 a big goal and freedom to fill in the gaps. This document removes the gaps. Each
 phase has a fixed, small deliverable list, an explicit "done when" test, and an
 explicit **stop list** of things it must NOT build yet, even if it thinks it's a
 natural next step.
 
-**How to use this with Gemini AI Studio (or any builder):**
+**How to use this with AI AI Studio (or any builder):**
 1. Every session, give it — in this order — `rules.md`, `SmilAI_PRD.md`,
    `SmilAI_SRS.md`, and this file.
 2. Tell it explicitly: *"We are on Phase X. Do only what Phase X lists. If you think
@@ -21,11 +21,11 @@ natural next step.
 
 ## Phase 0 — Audit what already exists (do this before anything else)
 
-Gemini has already built login and a dashboard. Before adding anything, verify what
+AI has already built login and a dashboard. Before adding anything, verify what
 exists actually matches the spec — bolting new phases onto a shaky foundation is how
 small hallucinations become big rework later.
 
-**Audit checklist (go through each with Gemini, fixing gaps before moving on):**
+**Audit checklist (go through each with AI, fixing gaps before moving on):**
 
 - [ ] Does login issue a real JWT (or session) containing **role** (`student` /
       `teacher` / `admin`) and **org_id**? (FR-ACC-4) If it's a stubbed/fake login,
@@ -68,7 +68,7 @@ cited chat. This is the smallest version of the whole loop working end to end.
 - [ ] `/v1/chat` — student asks a question, gets a **cited** streamed (SSE) answer
       from that subject's knowledge only (FR-CHAT-1, FR-CHAT-3).
 - [ ] Persona layer: one shared system prompt/persona definition injected into every
-      LLM call, even at this early stage (FR-PERSONA-1) — do not let Gemini write
+      LLM call, even at this early stage (FR-PERSONA-1) — do not let AI write
       ad hoc prompts per feature; there is one persona module every feature calls.
 
 **Explicitly do NOT build in Phase 1 (stop list):**
@@ -119,7 +119,7 @@ back to Piper instead of erroring or hanging.
 - [ ] `Assessment`, `Question`, `StudentAnswer`, `AnswerEvaluation` entities (SRS §6).
 - [ ] `/v1/subjects/{id}/assessments` — generate a test from that subject's ingested
       material, with configurable question count/topic/difficulty (FR-ASSESS-1).
-      Every generated question must reference its source chunk(s) — if Gemini
+      Every generated question must reference its source chunk(s) — if AI
       generates a question with no traceable source, that's a hallucination signal;
       reject it.
 - [ ] At least MCQ and short-answer question types (FR-ASSESS-2) for this phase;
@@ -145,14 +145,14 @@ explanation, visible in that student's subject record.
 ## Phase 4 — Code grading (confirm scope first)
 
 **Before starting: confirm whether Computer Science/coding is a 7th v1 subject or
-deferred** (this was left open in SRS §9 — settle it before Gemini builds anything
+deferred** (this was left open in SRS §9 — settle it before AI builds anything
 here, since it changes whether this phase happens now or much later).
 
 **If confirmed in scope, build exactly this:**
 - [ ] Student can upload a code file or project (zip/folder) tied to an assignment
       (FR-GRADE-1).
 - [ ] **Static analysis only** — reading the code for logic/structure/style/bug
-      patterns. **Do not execute the uploaded code.** If Gemini suggests running
+      patterns. **Do not execute the uploaded code.** If AI suggests running
       `exec`/`subprocess`/a sandbox "to check if it works," stop it — that's Phase 8,
       security-reviewed separately (FR-GRADE-2, rules.md non-negotiables).
 - [ ] Rubric-driven scoring (FR-GRADE-3), feedback through the persona layer, not a
@@ -175,7 +175,7 @@ the single most important checkpoint in the whole plan.
       Hindi, Maths, Science, Social Studies — whichever wasn't the pilot) using only:
       new `Subject`/`VirtualTeacherConfig` rows, new ingested documents, a rubric.
 - [ ] Explicitly verify **zero new code files or subject-specific `if` branches**
-      were needed in shared modules (chat, assessment, grading, persona). If Gemini
+      were needed in shared modules (chat, assessment, grading, persona). If AI
       had to write subject-specific logic anywhere outside config/data, the framework
       isn't generalized yet — fix that before adding more subjects, don't route
       around it.
@@ -238,7 +238,7 @@ dashboards · mobile front end · multi-GPU scaling · any multi-institution hos
 
 ## Anti-hallucination checklist (apply at every phase)
 
-- Does every new field/entity trace back to SRS §6? If Gemini invents one, check the
+- Does every new field/entity trace back to SRS §6? If AI invents one, check the
   SRS before accepting it — either add it there deliberately, or reject it.
 - Does every new endpoint match the SRS §7 API sketch, or is it a deliberate,
   documented extension? Undocumented new endpoints are a hallucination flag.

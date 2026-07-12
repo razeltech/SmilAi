@@ -1,6 +1,7 @@
 {
   "name": "SmilAI",
+  "version": "1.0.0",
+  "architecture": "React/Vite Frontend + FastAPI/Python Backend",
   "description": "An offline virtual-teacher platform powering subject-scoped RAG, voice interaction, assessment generation, and code grading.",
-  "requestFramePermissions": ["microphone"],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+  "requestFramePermissions": ["microphone"]
 }
