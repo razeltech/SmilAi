@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 
 from .database.connection import init_db
-from .api import auth, chat, content, assessments
+from .api import auth, chat, content, assessments, voice
 from .rag import coding_brain
 
 @asynccontextmanager
@@ -37,6 +37,7 @@ app.include_router(chat.router, prefix="/v1")
 app.include_router(content.router, prefix="/v1")
 app.include_router(assessments.router, prefix="/v1")
 app.include_router(coding_brain.router, prefix="/v1")
+app.include_router(voice.router, prefix="/v1")
 
 @app.get("/health")
 def health_check():
