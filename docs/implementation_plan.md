@@ -50,10 +50,11 @@ Thank you for the answers! Based on your feedback, here are my recommendations a
 - [ ] Implement British/American Accent Detection.
 - [ ] Integrate local TTS (Parler-TTS/Piper).
 
-### Phase 5: Playwright E2E Testing & Hardening (Days 16 - 18)
-*Goal: Prove it works flawlessly.*
-- [ ] Write E2E Playwright tests simulating API workflows.
-- [ ] Ensure single-GPU constraints hold up under parallel requests.
+### Phase 5: API Integration Testing (Pytest) (Days 16 - 18)
+*Goal: Validate the entire student/teacher workflow programmatically.*
+- [ ] Install `pytest` and `httpx`.
+- [ ] Create `tests/test_api_flow.py` to simulate: Registration -> Auth -> Document Upload (RAG) -> Inference -> Voice processing.
+- [ ] Ensure all endpoints return expected 200 OK statuses and correct JSON structures.
 
 ## User Review Required
 > [!IMPORTANT]
