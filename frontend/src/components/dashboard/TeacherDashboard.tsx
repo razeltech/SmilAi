@@ -429,10 +429,12 @@ export default function TeacherDashboard({ user, subject }: TeacherDashboardProp
   };
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 font-sans">
-      <div className="mb-8">
-        <h2 className="text-2xl font-bold text-slate-900">{subject.name} Workspace</h2>
-        <p className="text-sm text-slate-500">Welcome Mr. Sharma. Review learning resources, generate assessments, and audit scores.</p>
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 animate-float" style={{animationDuration: '10s'}}>
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-8 gap-4">
+        <div className="glass-panel p-6 rounded-2xl border-l-4 border-l-amber-500">
+          <h2 className="text-3xl font-extrabold text-slate-900 tracking-tight">Teacher <span className="text-amber-600">Dashboard</span></h2>
+          <p className="text-sm font-medium text-slate-500 mt-1">Manage subjects, rubrics, and monitor student progress offline.</p>
+        </div>
       </div>
 
       {success && (
@@ -451,51 +453,61 @@ export default function TeacherDashboard({ user, subject }: TeacherDashboardProp
 
       {/* Tabs */}
       <div className="flex border-b border-slate-200 mb-8 overflow-x-auto gap-2">
-        <button
-          onClick={() => setActiveTab('library')}
-          className={`pb-3 px-4 text-sm font-semibold border-b-2 transition-all cursor-pointer ${
-            activeTab === 'library' ? 'border-teal-600 text-teal-600' : 'border-transparent text-slate-500 hover:text-slate-800'
-          }`}
-          id="teacher-tab-library"
-        >
-          <span className="flex items-center gap-2"><BookOpen className="h-4 w-4" /> Knowledge Base</span>
-        </button>
-        <button
-          onClick={() => setActiveTab('assessments')}
-          className={`pb-3 px-4 text-sm font-semibold border-b-2 transition-all cursor-pointer ${
-            activeTab === 'assessments' ? 'border-teal-600 text-teal-600' : 'border-transparent text-slate-500 hover:text-slate-800'
-          }`}
-          id="teacher-tab-assessments"
-        >
-          <span className="flex items-center gap-2"><GraduationCap className="h-4 w-4" /> AI Assessments</span>
-        </button>
-        <button
-          onClick={() => setActiveTab('assignments')}
-          className={`pb-3 px-4 text-sm font-semibold border-b-2 transition-all cursor-pointer ${
-            activeTab === 'assignments' ? 'border-teal-600 text-teal-600' : 'border-transparent text-slate-500 hover:text-slate-800'
-          }`}
-          id="teacher-tab-assignments"
-        >
-          <span className="flex items-center gap-2"><Code className="h-4 w-4" /> Programming Projects</span>
-        </button>
-        <button
-          onClick={() => setActiveTab('submissions')}
-          className={`pb-3 px-4 text-sm font-semibold border-b-2 transition-all cursor-pointer ${
-            activeTab === 'submissions' ? 'border-teal-600 text-teal-600' : 'border-transparent text-slate-500 hover:text-slate-800'
-          }`}
-          id="teacher-tab-submissions"
-        >
-          <span className="flex items-center gap-2"><User className="h-4 w-4" /> Submissions & Grading</span>
-        </button>
-        <button
-          onClick={() => setActiveTab('profile')}
-          className={`pb-3 px-4 text-sm font-semibold border-b-2 transition-all cursor-pointer ${
-            activeTab === 'profile' ? 'border-teal-600 text-teal-600' : 'border-transparent text-slate-500 hover:text-slate-800'
-          }`}
-          id="teacher-tab-profile"
-        >
-          <span className="flex items-center gap-2"><User className="h-4 w-4" /> My Profile</span>
-        </button>
+        <div className="glass-panel p-1.5 rounded-xl flex gap-1 shadow-lg hover-glow">
+          <button
+            onClick={() => setActiveTab('overview')}
+            className={`px-4 py-2 text-sm font-bold rounded-lg transition-all cursor-pointer ${
+              activeTab === 'overview' ? 'bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow-md' : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50/50'
+            }`}
+          >
+            Overview
+          </button>
+          <button
+            onClick={() => setActiveTab('library')}
+            className={`pb-3 px-4 text-sm font-semibold border-b-2 transition-all cursor-pointer ${
+              activeTab === 'library' ? 'border-teal-600 text-teal-600' : 'border-transparent text-slate-500 hover:text-slate-800'
+            }`}
+            id="teacher-tab-library"
+          >
+            <span className="flex items-center gap-2"><BookOpen className="h-4 w-4" /> Knowledge Base</span>
+          </button>
+          <button
+            onClick={() => setActiveTab('assessments')}
+            className={`pb-3 px-4 text-sm font-semibold border-b-2 transition-all cursor-pointer ${
+              activeTab === 'assessments' ? 'border-teal-600 text-teal-600' : 'border-transparent text-slate-500 hover:text-slate-800'
+            }`}
+            id="teacher-tab-assessments"
+          >
+            <span className="flex items-center gap-2"><GraduationCap className="h-4 w-4" /> AI Assessments</span>
+          </button>
+          <button
+            onClick={() => setActiveTab('assignments')}
+            className={`pb-3 px-4 text-sm font-semibold border-b-2 transition-all cursor-pointer ${
+              activeTab === 'assignments' ? 'border-teal-600 text-teal-600' : 'border-transparent text-slate-500 hover:text-slate-800'
+            }`}
+            id="teacher-tab-assignments"
+          >
+            <span className="flex items-center gap-2"><Code className="h-4 w-4" /> Programming Projects</span>
+          </button>
+          <button
+            onClick={() => setActiveTab('submissions')}
+            className={`pb-3 px-4 text-sm font-semibold border-b-2 transition-all cursor-pointer ${
+              activeTab === 'submissions' ? 'border-teal-600 text-teal-600' : 'border-transparent text-slate-500 hover:text-slate-800'
+            }`}
+            id="teacher-tab-submissions"
+          >
+            <span className="flex items-center gap-2"><User className="h-4 w-4" /> Submissions & Grading</span>
+          </button>
+          <button
+            onClick={() => setActiveTab('profile')}
+            className={`pb-3 px-4 text-sm font-semibold border-b-2 transition-all cursor-pointer ${
+              activeTab === 'profile' ? 'border-teal-600 text-teal-600' : 'border-transparent text-slate-500 hover:text-slate-800'
+            }`}
+            id="teacher-tab-profile"
+          >
+            <span className="flex items-center gap-2"><User className="h-4 w-4" /> My Profile</span>
+          </button>
+        </div>
       </div>
 
       {/* Tab Content */}

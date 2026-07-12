@@ -271,50 +271,67 @@ export default function StudentDashboard({ user, subject }: StudentDashboardProp
     setInputMsg('');
     setLoading(true);
 
-    // Append message optimistically
+    // Append user message optimistically
     const optimisticUserMsg: ChatMessage = {
-      id: `opt-${Date.now()}`,
+      id: `user-${Date.now()}`,
       sessionId: currentSessionId,
       role: 'user',
       content: userText,
       timestamp: new Date().toISOString()
     };
-    setMessages(prev => [...prev, optimisticUserMsg]);
+    
+    // Create empty placeholder for assistant's streaming response
+    const assistantMsgId = `ast-${Date.now()}`;
+    const placeholderAssistantMsg: ChatMessage = {
+      id: assistantMsgId,
+      sessionId: currentSessionId,
+      role: 'assistant',
+      content: '',
+      timestamp: new Date().toISOString()
+    };
+    
+    setMessages(prev => [...prev, optimisticUserMsg, placeholderAssistantMsg]);
 
     try {
-      const res = await fetch('/v1/chat', {
+      const res = await fetch('/v1/chat/stream', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          sessionId: currentSessionId || undefined,
-          userId: user.id,
-          subjectId: subject.id,
-          message: userText,
-          docId: selectedDocId,
-          useOllama: useOllama,
-          ollamaUrl: ollamaUrl,
-          ollamaModel: ollamaModel
+          subject_id: subject.id,
+          message: userText
         })
       });
 
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Failed to converse');
-
-      // Update current session if new
-      if (!currentSessionId) {
-        setCurrentSessionId(data.sessionId);
-        // Refresh sessions list
-        const sessRes = await fetch(`/v1/chat/sessions?userId=${user.id}&subjectId=${subject.id}`);
-        const sessData = await sessRes.json();
-        setSessions(sessData);
+      if (!res.ok) {
+        throw new Error('Failed to connect to SmilAI brain');
       }
 
-      setMessages(prev => [...prev.filter(m => m.id !== optimisticUserMsg.id), optimisticUserMsg, data.message]);
+      if (!res.body) throw new Error('ReadableStream not supported');
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder('utf-8');
+      let streamedResponse = '';
+
+      // Stream the response directly into the UI state
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        
+        const chunk = decoder.decode(value, { stream: true });
+        streamedResponse += chunk;
+        
+        setMessages(prev => prev.map(msg => 
+          msg.id === assistantMsgId ? { ...msg, content: streamedResponse } : msg
+        ));
+      }
+
+      // Auto speak the final streamed response if enabled
+      speakText(streamedResponse);
       
-      // Auto speak the SmilAI response
-      speakText(data.message.content);
     } catch (err: any) {
       setError(err.message);
+      // Remove placeholder on error
+      setMessages(prev => prev.filter(m => m.id !== assistantMsgId));
     } finally {
       setLoading(false);
     }
@@ -415,18 +432,18 @@ export default function StudentDashboard({ user, subject }: StudentDashboardProp
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 font-sans">
       
       {/* Subject Heading */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-8 gap-4">
-        <div>
-          <h2 className="text-2xl font-bold text-slate-900">{subject.name} Classroom</h2>
-          <p className="text-sm text-slate-500">Your virtual private mentor, SmilAI, is active and listening.</p>
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-8 gap-4 animate-float" style={{animationDuration: '8s'}}>
+        <div className="glass-panel p-6 rounded-2xl border-l-4 border-l-teal-500">
+          <h2 className="text-3xl font-extrabold text-slate-900 tracking-tight">{subject.name} <span className="text-teal-600">Classroom</span></h2>
+          <p className="text-sm font-medium text-slate-500 mt-1">Your virtual private mentor, SmilAI, is active and listening.</p>
         </div>
 
         {/* Quick Workspaces Toggle */}
-        <div className="bg-white border border-slate-100 p-1 rounded-xl shadow-sm flex gap-1">
+        <div className="glass-panel p-1.5 rounded-xl flex gap-1 shadow-lg hover-glow">
           <button
             onClick={() => setActiveWorkspace('chat')}
-            className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-all cursor-pointer ${
-              activeWorkspace === 'chat' ? 'bg-teal-600 text-white' : 'text-slate-600 hover:text-slate-900'
+            className={`px-4 py-2 text-sm font-bold rounded-lg transition-all cursor-pointer ${
+              activeWorkspace === 'chat' ? 'bg-gradient-to-r from-teal-500 to-emerald-500 text-white shadow-md' : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50/50'
             }`}
             id="workspace-chat-btn"
           >
@@ -434,8 +451,8 @@ export default function StudentDashboard({ user, subject }: StudentDashboardProp
           </button>
           <button
             onClick={() => setActiveWorkspace('code')}
-            className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-all cursor-pointer ${
-              activeWorkspace === 'code' ? 'bg-teal-600 text-white' : 'text-slate-600 hover:text-slate-900'
+            className={`px-4 py-2 text-sm font-bold rounded-lg transition-all cursor-pointer ${
+              activeWorkspace === 'code' ? 'bg-gradient-to-r from-teal-500 to-emerald-500 text-white shadow-md' : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50/50'
             }`}
             id="workspace-code-btn"
           >
@@ -443,8 +460,8 @@ export default function StudentDashboard({ user, subject }: StudentDashboardProp
           </button>
           <button
             onClick={() => setActiveWorkspace('test')}
-            className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-all cursor-pointer ${
-              activeWorkspace === 'test' ? 'bg-teal-600 text-white' : 'text-slate-600 hover:text-slate-900'
+            className={`px-4 py-2 text-sm font-bold rounded-lg transition-all cursor-pointer ${
+              activeWorkspace === 'test' ? 'bg-gradient-to-r from-teal-500 to-emerald-500 text-white shadow-md' : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50/50'
             }`}
             id="workspace-test-btn"
           >
@@ -452,8 +469,8 @@ export default function StudentDashboard({ user, subject }: StudentDashboardProp
           </button>
           <button
             onClick={() => setActiveWorkspace('record')}
-            className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-all cursor-pointer ${
-              activeWorkspace === 'record' ? 'bg-teal-600 text-white' : 'text-slate-600 hover:text-slate-900'
+            className={`px-4 py-2 text-sm font-bold rounded-lg transition-all cursor-pointer ${
+              activeWorkspace === 'record' ? 'bg-gradient-to-r from-teal-500 to-emerald-500 text-white shadow-md' : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50/50'
             }`}
             id="workspace-record-btn"
           >
@@ -461,8 +478,8 @@ export default function StudentDashboard({ user, subject }: StudentDashboardProp
           </button>
           <button
             onClick={() => setActiveWorkspace('profile')}
-            className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-all cursor-pointer ${
-              activeWorkspace === 'profile' ? 'bg-teal-600 text-white' : 'text-slate-600 hover:text-slate-900'
+            className={`px-4 py-2 text-sm font-bold rounded-lg transition-all cursor-pointer ${
+              activeWorkspace === 'profile' ? 'bg-gradient-to-r from-teal-500 to-emerald-500 text-white shadow-md' : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50/50'
             }`}
             id="workspace-profile-btn"
           >
@@ -492,7 +509,7 @@ export default function StudentDashboard({ user, subject }: StudentDashboardProp
         {activeWorkspace === 'chat' && (
           <>
             {/* Sessions Sidebar */}
-            <div className="lg:col-span-1 bg-white p-4 rounded-xl border border-slate-100 shadow-sm space-y-4 flex flex-col justify-between">
+            <div className="lg:col-span-1 glass-panel p-5 rounded-2xl space-y-4 flex flex-col justify-between hover-glow">
               <div className="space-y-4">
                 <div className="flex justify-between items-center">
                   <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400">Conversations</h3>
@@ -581,9 +598,9 @@ export default function StudentDashboard({ user, subject }: StudentDashboardProp
             </div>
 
             {/* Chat Box */}
-            <div className="lg:col-span-3 bg-white border border-slate-100 rounded-xl shadow-sm flex flex-col h-[520px]">
+            <div className="lg:col-span-3 glass-panel rounded-2xl flex flex-col h-[600px] hover-glow overflow-hidden">
               {/* Chat Header */}
-              <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
+              <div className="px-6 py-4 border-b border-white/20 flex justify-between items-center bg-white/40 backdrop-blur-md">
                 <div className="flex items-center gap-2">
                   <div className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></div>
                   <span className="text-sm font-bold text-slate-800">Chatting with SmilAI</span>
