@@ -1,0 +1,19 @@
+node_modules/
+build/
+dist/
+coverage/
+.DS_Store
+*.log
+.env*
+!.env.example
+smilai_db.json
+smilai.db
+
+# Python & AI specific
+__pycache__/
+*.pyc
+.venv/
+venv/
+models/
+huggingface/
+.pytest_cache/

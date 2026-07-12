@@ -1,0 +1,6 @@
+{
+  "name": "SmilAI",
+  "description": "An offline virtual-teacher platform powering subject-scoped RAG, voice interaction, assessment generation, and code grading.",
+  "requestFramePermissions": ["microphone"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
