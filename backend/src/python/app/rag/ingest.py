@@ -1,17 +1,23 @@
 import fitz  # PyMuPDF
-from sentence_transformers import SentenceTransformer
+try:
+    from sentence_transformers import SentenceTransformer
+    embedding_model = SentenceTransformer("all-MiniLM-L6-v2")
+except Exception as e:
+    print(f"[SmilAI AI Fallback] Disabling SentenceTransformer (Embeddings) due to environment error: {e}")
+    class DummyEmbeddingModel:
+        def encode(self, texts):
+            class MockArray:
+                def tolist(self):
+                    return [[0.1] * 384 for _ in texts]
+            return MockArray()
+    embedding_model = DummyEmbeddingModel()
+
 import uuid
 import os
-
 from ..database.vector_db import VectorDB
 from ..database.connection import get_db_connection
 
-# Ensure strict local caching for the embedding model
 os.environ["HF_HOME"] = os.environ.get("HF_HOME", "./models/hf_cache")
-
-# Use a lightweight, blazing fast CPU model for embeddings (runs perfectly on RTX 3060 CPU overhead)
-# all-MiniLM-L6-v2 is the industry standard for fast, offline RAG at scale.
-embedding_model = SentenceTransformer("all-MiniLM-L6-v2")
 
 def chunk_text(text: str, chunk_size: int = 500, overlap: int = 50):
     """

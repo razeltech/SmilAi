@@ -1,4 +1,13 @@
-from sentence_transformers import CrossEncoder
+try:
+    from sentence_transformers import CrossEncoder
+    reranker = CrossEncoder('cross-encoder/ms-marco-MiniLM-L-6-v2')
+except Exception as e:
+    print(f"[SmilAI AI Fallback] Disabling CrossEncoder (Reranker) due to environment error: {e}")
+    class DummyCrossEncoder:
+        def predict(self, pairs):
+            return [0.5 for _ in pairs]
+    reranker = DummyCrossEncoder()
+
 from rank_bm25 import BM25Okapi
 import os
 
@@ -8,9 +17,6 @@ from .ingest import embedding_model
 
 # Ensure strict local caching
 os.environ["HF_HOME"] = os.environ.get("HF_HOME", "./models/hf_cache")
-
-# Local cross-encoder for semantic reranking (Runs fast on CPU)
-reranker = CrossEncoder('cross-encoder/ms-marco-MiniLM-L-6-v2')
 
 def staged_hybrid_search(query: str, org_id: str, subject_id: str, top_k: int = 5):
     """

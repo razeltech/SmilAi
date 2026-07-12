@@ -16,6 +16,11 @@ class UserLogin(BaseModel):
 class Token(BaseModel):
     access_token: str
     token_type: str
+    id: Optional[str] = None
+    name: Optional[str] = None
+    email: Optional[EmailStr] = None
+    role: Optional[str] = None
+    org_id: Optional[str] = None
 
 class UserResponse(BaseModel):
     id: str

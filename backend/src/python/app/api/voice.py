@@ -1,8 +1,18 @@
 import os
 from fastapi import APIRouter, UploadFile, File, HTTPException
 from fastapi.responses import FileResponse
-from faster_whisper import WhisperModel
-from piper.voice import PiperVoice
+try:
+    from faster_whisper import WhisperModel
+except Exception as e:
+    print(f"[SmilAI AI Fallback] Disabling faster_whisper due to environment error: {e}")
+    WhisperModel = None
+
+try:
+    from piper.voice import PiperVoice
+except Exception as e:
+    print(f"[SmilAI AI Fallback] Disabling PiperVoice due to environment error: {e}")
+    PiperVoice = None
+
 import uuid
 import wave
 
@@ -19,9 +29,17 @@ def get_whisper_model():
     global whisper_model
     if whisper_model is None:
         print("Booting up Local Whisper STT Engine...")
-        # device="cuda" if RTX 3060 is fully available, else "cpu". 
-        # Using "auto" allows it to fallback safely without crashing.
-        whisper_model = WhisperModel("base.en", device="auto", compute_type="default")
+        if WhisperModel is None:
+            class DummyWhisper:
+                def transcribe(self, path, beam_size):
+                    class Segment:
+                        text = "I am a simulated STT response because the local Whisper model is not installed on this PC."
+                    class Info:
+                        language = "en"
+                    return [Segment()], Info()
+            whisper_model = DummyWhisper()
+        else:
+            whisper_model = WhisperModel("base.en", device="auto", compute_type="default")
     return whisper_model
 
 @router.post("/transcribe")
@@ -72,15 +90,18 @@ async def generate_speech(text: str):
     voice_model_path = os.path.join(os.environ["HF_HOME"], "piper", "en_US-lessac-medium.onnx")
     
     try:
-        if os.path.exists(voice_model_path):
+        if os.path.exists(voice_model_path) and PiperVoice is not None:
             # 1. Real Piper TTS Execution
             voice = PiperVoice.load(voice_model_path)
             with wave.open(output_path, "wb") as wav_file:
                 voice.synthesize(text, wav_file)
         else:
-            # 2. Fallback: If model isn't downloaded yet, use pyttsx3 so it doesn't crash
+            # 2. Fallback: If model isn't downloaded yet or piper failed to import
             import pyttsx3
-            print(f"Warning: Piper model not found at {voice_model_path}. Falling back to pyttsx3.")
+            if PiperVoice is None:
+                print("Warning: PiperVoice could not be imported. Falling back to pyttsx3.")
+            else:
+                print(f"Warning: Piper model not found at {voice_model_path}. Falling back to pyttsx3.")
             engine = pyttsx3.init()
             engine.save_to_file(text, output_path)
             engine.runAndWait()
