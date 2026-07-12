@@ -18,7 +18,7 @@ if %ERRORLEVEL% NEQ 0 (
 )
 
 echo 2. Booting FastAPI Backend on Port 8000...
-start "SmilAI Backend" cmd /k "cd backend && call .\.venv\Scripts\activate.bat && set PYTHONPATH=%cd%\.venv\Lib\site-packages && python -m uvicorn src.python.app.main:app --reload --host 0.0.0.0 --port 8000"
+start "SmilAI Backend" cmd /k "cd backend && .\.venv\Scripts\python.exe -m uvicorn src.python.app.main:app --reload --host 0.0.0.0 --port 8000"
 
 echo 3. Booting React Vite Frontend on Port 5173...
 start "SmilAI Frontend" cmd /k "cd frontend && npm run dev"
