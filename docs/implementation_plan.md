@@ -52,12 +52,16 @@ Thank you for the answers! Based on your feedback, here are my recommendations a
 
 ### Phase 5: API Integration Testing (Pytest) (Days 16 - 18)
 *Goal: Validate the entire student/teacher workflow programmatically.*
-- [ ] Install `pytest` and `httpx`.
-- [ ] Create `tests/test_api_flow.py` to simulate: Registration -> Auth -> Document Upload (RAG) -> Inference -> Voice processing.
-- [ ] Ensure all endpoints return expected 200 OK statuses and correct JSON structures.
+- [x] Install `pytest` and `httpx`.
+- [x] Create `tests/test_api_flow.py` to simulate: Registration -> Auth -> Document Upload (RAG) -> Inference -> Voice processing.
+- [x] Ensure all endpoints return expected 200 OK statuses and correct JSON structures.
+
+### Phase 6: Connect Existing React Frontend (Days 19 - 21)
+*Goal: Wire the beautiful existing React frontend directly into our new Python API.*
+- [ ] **Vite Proxy**: Update `vite.config.ts` to proxy all `/v1` requests from the React app to the FastAPI server on port 8000.
+- [ ] **Data Mocking Strategy**: The React app expects many legacy Node.js endpoints (e.g., `/v1/org-settings`, `/v1/subjects`, `/v1/grade-bands`). Since we threw away Node to focus purely on the core AI, I will create a clean `admin.py` router in Python that returns solid placeholder data. This allows the app to load flawlessly without crashing.
+- [ ] **Launch & Test**: Boot both the Vite UI and the Python server simultaneously so you can use the Voice and Chat buttons in the browser!
 
 ## User Review Required
 > [!IMPORTANT]
-> The architectural plan is now locked in (Qwen-2.5 + ChromaDB + 100% FastAPI). 
-> 
-> Do you approve this updated plan? If so, I will immediately begin executing Phase 1 (Building the FastAPI Authentication and Database Connection engine)!
+> **Phase 6 Approval:** Do you approve the plan to build the React Frontend using Vite and beautiful Vanilla CSS (no bloated frameworks)? If you approve, I will run the initialization commands right now!!

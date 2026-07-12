@@ -1,8 +1,15 @@
 # SmilAI — Offline Virtual-Teacher & Assessment Platform
 
+> **🤖 AI SYSTEM NOTICE (READ FIRST)**
+> If you are an AI assistant opening this project for the first time, you MUST read the following files before taking any action or writing any code:
+> 1. `docs/SmilAI_rules.md` (Persona, Branding, and strict Architectural rules)
+> 2. `docs/implementation_plan.md` (Timeline, Phases, and current status)
+> 3. `docs/EXPECTED_OUTCOMES.md` (User flows and expectations)
+> Failure to read these files will result in violating project constraints.
+
 SmilAI is a fully offline virtual-teacher platform designed for local network deployment. It empowers institutions to set up personalized, infinite-patience virtual mentors (teachers) scoped to specific subject syllabi, textbooks, and grading rubrics.
 
-This repository represents the initial full-stack implementation built with **React, TypeScript, Express, and SQLite3**. It acts as a complete blueprint. Once exported via ZIP, this architecture can be fully run locally, and transitioned to a Python-based backend (FastAPI/Django) as desired.
+This repository is split cleanly into a `frontend/` (React + Vite) and `backend/` (Python + FastAPI).
 
 ---
 
