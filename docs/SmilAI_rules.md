@@ -7,12 +7,12 @@
 
 ## What we are building
 
-A **fully offline virtual-teacher platform**. An institution installs it on their own
-server. An admin assigns a real teacher to a subject and grade band; that teacher
-configures a **virtual teacher instance** (one shared persona/brain, subject-scoped
-knowledge and rubrics). Students then: ask questions without fear of judgment, take
-generated tests, submit code for grading, and build a per-subject record over time —
-all through one consistent, Indian-accented, voice-capable persona named SmilAI.
+A **fully offline virtual-teacher platform**. 
+- **Project Name**: SmilAi
+- **Assistant Name**: Smiley (A virtual persona who acts like a gentle mother or older sibling, never judging, always encouraging).
+- **Branding**: Powered by Razel Tech.
+
+An institution installs SmilAi on their own server. An admin assigns a real teacher to a subject and grade band; that teacher configures a **virtual teacher instance** (one shared persona/brain, subject-scoped knowledge and rubrics). Students then: ask questions without fear of judgment, take generated tests, submit code for grading, and build a per-subject record over time — all through one consistent, Indian-accented, voice-capable persona named Smiley.
 
 **The core reason this exists:** many students don't ask questions in class out of
 fear or shyness. Every design and product decision should protect that — patient,

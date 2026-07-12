@@ -17,3 +17,12 @@ venv/
 models/
 huggingface/
 .pytest_cache/
+
+# Playwright & Testing
+test-results/
+playwright-report/
+blob-report/
+playwright/.cache/
+screenshots/
+*.png
+*.webm
