@@ -8,11 +8,13 @@ This document outlines the final, sellable product that we are building. By the 
 - **Zero Internet Requirement:** If the school's Wi-Fi goes down, SmilAI continues to teach every student flawlessly over the local network. 
 - **Absolute Data Privacy:** Student data, grades, and code submissions never leave the physical building. This is the ultimate selling point for government contracts.
 
-## 2. The "No Judgment" Motherly Persona
-**The Outcome:** A student sits at a cheap Chromebook or lab PC, logs into their subject, and meets SmilAI.
-- SmilAI speaks in a warm, patient voice, treating the student like a beloved younger sibling.
-- The student can ask 100 "stupid" questions or fail 10 tests in a row. SmilAI acts like a gentle mother—she never gets frustrated.
-- Every answer SmilAI gives includes a `[Citation]`, pointing the student to the exact paragraph in their uploaded school textbook. No hallucinations.
+## 2. The "No Judgment" Motherly Persona & Humanized Latency
+**The Outcome:** A student sits at a cheap Chromebook or lab PC, logs into their subject, and meets Smiley.
+- **Humanized Latency:** When a student asks a complex question, instead of a frozen screen or spinning wheel, Smiley immediately says, *"Hmm, let me think about that for a second, [Student Name]..."* while the backend RAG engine processes the PDF chunks. This eliminates robotic waiting and keeps a 1st-grader engaged.
+- **Voice-First for Young Kids:** A 1st-grader who cannot type can exclusively use the microphone to talk to Smiley. Older students (10th grade) can type, voice chat, or both.
+- Smiley speaks in a warm, patient voice, treating the student like a beloved younger sibling.
+- The student can ask 100 "stupid" questions or fail 10 tests in a row. Smiley acts like a gentle mother—she never gets frustrated.
+- Every answer Smiley gives includes a `[Citation]`, pointing the student to the exact paragraph in their uploaded school textbook. No hallucinations.
 
 ## 3. British & American Accent Practice
 **The Outcome:** SmilAI goes beyond just reading text; she actively listens.
