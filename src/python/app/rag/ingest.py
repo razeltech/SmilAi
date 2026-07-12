@@ -1,0 +1,91 @@
+import fitz  # PyMuPDF
+from sentence_transformers import SentenceTransformer
+import uuid
+import os
+
+from ..database.vector_db import VectorDB
+from ..database.connection import get_db_connection
+
+# Ensure strict local caching for the embedding model
+os.environ["HF_HOME"] = os.environ.get("HF_HOME", "./models/hf_cache")
+
+# Use a lightweight, blazing fast CPU model for embeddings (runs perfectly on RTX 3060 CPU overhead)
+# all-MiniLM-L6-v2 is the industry standard for fast, offline RAG at scale.
+embedding_model = SentenceTransformer("all-MiniLM-L6-v2")
+
+def chunk_text(text: str, chunk_size: int = 500, overlap: int = 50):
+    """
+    Splits raw textbook text into overlapping chunks.
+    Keeps chunks small enough for precise retrieval without context poisoning.
+    """
+    words = text.split()
+    chunks = []
+    for i in range(0, len(words), chunk_size - overlap):
+        chunk = " ".join(words[i:i + chunk_size])
+        if chunk:
+            chunks.append(chunk)
+    return chunks
+
+def process_and_ingest_pdf(pdf_bytes: bytes, filename: str, org_id: str, subject_id: str, uploader_id: str):
+    """
+    1. Reads PDF bytes from the teacher upload.
+    2. Chunks the text logically.
+    3. Generates vector embeddings.
+    4. Saves to SQLite (Metadata) AND ChromaDB (Vectors) for the Staged Hybrid RAG.
+    """
+    doc = fitz.open(stream=pdf_bytes, filetype="pdf")
+    full_text = ""
+    for page in doc:
+        full_text += page.get_text("text") + "\n"
+        
+    chunks = chunk_text(full_text)
+    
+    # 1. Save Document Metadata to SQLite
+    doc_id = str(uuid.uuid4())
+    conn = get_db_connection()
+    conn.execute(
+        "INSERT INTO documents (id, subject_id, org_id, name, content, type, chunk_count, uploaded_at) VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'))",
+        (doc_id, subject_id, org_id, filename, "Stored in VectorDB", "library", len(chunks))
+    )
+    
+    # 2. Prepare Data for ChromaDB
+    collection = VectorDB.get_collection()
+    ids = []
+    documents = []
+    metadatas = []
+    embeddings = []
+    
+    for i, chunk in enumerate(chunks):
+        chunk_id = f"{doc_id}_chunk_{i}"
+        
+        # Save chunk metadata to SQLite for full relational tracking
+        conn.execute(
+            "INSERT INTO chunks (id, doc_id, org_id, subject_id, text, chunk_index) VALUES (?, ?, ?, ?, ?, ?)",
+            (chunk_id, doc_id, org_id, subject_id, chunk, i)
+        )
+        
+        ids.append(chunk_id)
+        documents.append(chunk)
+        # Crucial for Staged Filter: We inject org_id and subject_id into Chroma metadata
+        metadatas.append({
+            "doc_id": doc_id,
+            "org_id": org_id,
+            "subject_id": subject_id,
+            "chunk_index": i
+        })
+        
+    conn.commit()
+    conn.close()
+    
+    # 3. Generate Embeddings & Push to Vector Store (Offline)
+    print(f"Generating embeddings for {len(chunks)} chunks...")
+    embeddings = embedding_model.encode(documents).tolist()
+    
+    collection.add(
+        ids=ids,
+        embeddings=embeddings,
+        documents=documents,
+        metadatas=metadatas
+    )
+    
+    return {"message": "Success", "doc_id": doc_id, "total_chunks": len(chunks)}
