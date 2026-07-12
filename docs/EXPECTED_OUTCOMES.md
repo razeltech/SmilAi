@@ -8,13 +8,19 @@ This document outlines the final, sellable product that we are building. By the 
 - **Zero Internet Requirement:** If the school's Wi-Fi goes down, SmilAI continues to teach every student flawlessly over the local network. 
 - **Absolute Data Privacy:** Student data, grades, and code submissions never leave the physical building. This is the ultimate selling point for government contracts.
 
-## 2. The "No Judgment" Student Experience
+## 2. The "No Judgment" Motherly Persona
 **The Outcome:** A student sits at a cheap Chromebook or lab PC, logs into their subject, and meets SmilAI.
-- SmilAI speaks in a warm, patient, Indian-accented voice.
-- The student can ask 100 "stupid" questions or fail 10 tests in a row. SmilAI never gets frustrated.
+- SmilAI speaks in a warm, patient voice, treating the student like a beloved younger sibling.
+- The student can ask 100 "stupid" questions or fail 10 tests in a row. SmilAI acts like a gentle mother—she never gets frustrated.
 - Every answer SmilAI gives includes a `[Citation]`, pointing the student to the exact paragraph in their uploaded school textbook. No hallucinations.
 
-## 3. Teacher Superpowers (The Dashboard)
+## 3. British & American Accent Practice
+**The Outcome:** SmilAI goes beyond just reading text; she actively listens.
+- Students can practice reading English sentences into the microphone.
+- SmilAI uses local Speech-to-Text (STT) and audio analysis to detect mispronunciations.
+- She gently corrects the student, modeling the correct British or American accent using high-quality local Text-to-Speech (TTS), enabling high-end language lab features in rural schools.
+
+## 4. Teacher Superpowers (The Dashboard)
 **The Outcome:** Real human teachers are not replaced; they are given superpowers.
 - **Library Mode:** A teacher uploads the entire year's curriculum (PDFs, text) once.
 - **Auto-Assessment:** The teacher clicks a button, and SmilAI generates a 20-question test based *only* on the uploaded syllabus.

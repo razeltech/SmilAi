@@ -5,11 +5,12 @@
 ## 1. Project Vision & Core Directives
 SmilAI is a production-grade, on-premise virtual AI teacher platform designed for government and private schools.
 1. **Fully Offline & Air-Gapped**: The system must run on-premise without *any* external internet dependencies. No cloud APIs (OpenAI/Anthropic), no external LLM providers.
-2. **One Brain, Many Subjects**: One underlying AI persona (a warm, encouraging, patient Indian-accented English teacher) configured into many subject-specific virtual teachers (Math, Science, English, etc.). 
-3. **No Judgement Learning**: Aimed at students who are afraid to ask questions in class.
-4. **Local Hardware Constraints**: Assumed hardware is a single RTX 3060 12GB. GPU is a shared, scarce resource. Small models (embeddings/rerankers) should default to CPU threading to prevent VRAM locking.
-5. **Strict Local Model Storage**: All AI models (LLMs, Embeddings, STT, TTS, Rerankers) MUST be downloaded exclusively inside the project directory (e.g., `./models/`). Global caching (`~/.cache/huggingface`) is strictly prohibited. Use `HF_HOME` and `OLLAMA_MODELS` variables.
-6. **API-First Extensibility**: Like Athena, the API is the product. Our endpoints must be robust and clean enough to support a React UI today, and a Unity/Mobile app tomorrow.
+2. **One Brain, Many Subjects**: One underlying AI persona configured into many subject-specific virtual teachers (Math, Science, Coding Brain, Language Brain). 
+3. **Motherly & Gentle Persona**: SmilAI treats the student like a younger brother or sister. She acts like a gentle, incredibly patient mother who teaches without *any* judgement. Students who are afraid to ask questions in class must feel perfectly safe asking her.
+4. **Accent & Pronunciation Training**: The system specifically includes Voice Detection and Correction for teaching British and American accent practice.
+5. **Local Hardware Constraints**: Assumed hardware is a single RTX 3060 12GB. GPU is a shared, scarce resource. Small models (embeddings/rerankers) should default to CPU threading to prevent VRAM locking.
+6. **Strict Local Model Storage**: All AI models (LLMs, Embeddings, STT, TTS, Rerankers) MUST be downloaded exclusively inside the project directory (e.g., `./models/`). Global caching (`~/.cache/huggingface`) is strictly prohibited. Use `HF_HOME` and `OLLAMA_MODELS` variables.
+7. **API-First Extensibility**: Like Athena, the API is the product. Our endpoints must be robust and clean enough to support a React UI today, and a Unity/Mobile app tomorrow.
 
 ---
 
