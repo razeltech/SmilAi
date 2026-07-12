@@ -2,6 +2,8 @@ import asyncio
 from fastapi import APIRouter, Depends
 from fastapi.responses import StreamingResponse
 import random
+from sqlite3 import Connection
+from ..database.connection import get_db
 
 from .schemas import ChatRequest
 from ..rag.retrieve import staged_hybrid_search
@@ -46,3 +48,12 @@ async def stream_chat(request: ChatRequest):
     sees a loading wheel, adhering to the 'Humanized Latency' design pattern.
     """
     return StreamingResponse(chat_stream_generator(request), media_type="text/event-stream")
+
+@router.get("/sessions")
+def get_sessions(userId: str, subjectId: str, db: Connection = Depends(get_db)):
+    """Fetches all chat sessions for a student in a subject."""
+    sessions = db.execute(
+        "SELECT * FROM chat_sessions WHERE user_id = ? AND subject_id = ? ORDER BY created_at DESC", 
+        (userId, subjectId)
+    ).fetchall()
+    return sessions

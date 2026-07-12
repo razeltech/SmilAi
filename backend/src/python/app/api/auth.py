@@ -78,3 +78,23 @@ def login(credentials: UserLogin, db: Connection = Depends(get_db)):
         "role": user["role"],
         "org_id": user["org_id"]
     }
+
+@router.get("/users/{user_id}/profile")
+def get_user_profile(user_id: str, db: Connection = Depends(get_db)):
+    """Fetches public profile data for a user."""
+    user = db.execute("SELECT id, name, email, role, org_id FROM users WHERE id = ?", (user_id,)).fetchone()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    # Return mock profile data since we don't have a profile table yet
+    return {
+        "id": user["id"],
+        "name": user["name"],
+        "email": user["email"],
+        "role": user["role"],
+        "org_id": user["org_id"],
+        "phone": "+91 9876543210",
+        "bio": "Enthusiastic learner focusing on Science and Math.",
+        "grade": "10th",
+        "board": "AP State Board"
+    }

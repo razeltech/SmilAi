@@ -21,6 +21,22 @@ def get_subjects(userId: str = None, role: str = None):
         }
     ]
 
+@router.get("/subjects/{subjectId}/assignments")
+def get_subject_assignments(subjectId: str):
+    return []
+
+@router.get("/subjects/{subjectId}/assessments")
+def get_subject_assessments(subjectId: str):
+    return []
+
+@router.get("/subjects/{subjectId}/documents")
+def get_subject_documents(subjectId: str):
+    return []
+
+@router.get("/subjects/{subjectId}/submissions")
+def get_subject_submissions(subjectId: str):
+    return []
+
 @router.get("/grade-bands")
 def get_grade_bands():
     return []
