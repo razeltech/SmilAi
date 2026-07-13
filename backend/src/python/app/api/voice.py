@@ -131,22 +131,76 @@ VOICE_PROMPT_VERSION = "2026_07_v2"
 CORE_TEACHER_PERSONA = "A warm Indian female voice speaking clear Indian English. She sounds like an experienced school teacher who is encouraging and reassuring."
 
 SPEAKING_STYLES = {
-    "warm": f"{CORE_TEACHER_PERSONA} She speaks slowly, patiently, and gently, with warm and calm intonation. She pauses naturally.",
-    "focused": f"{CORE_TEACHER_PERSONA} She speaks at a moderate pace, clearly and confidently, with focused and energetic pronunciation.",
-    "comfort": f"{CORE_TEACHER_PERSONA} She speaks slowly, softly, and gently, with a comforting and reassuring tone.",
-    "quiz": f"{CORE_TEACHER_PERSONA} She speaks clearly and enthusiastically, with encouraging and active intonation.",
-    "story": f"{CORE_TEACHER_PERSONA} She speaks expressively and playfully, with intonation changes to keep children engaged."
+    "warm": f"{CORE_TEACHER_PERSONA} She speaks slowly with gentle pauses, sounding like she is smiling gently while speaking. Her voice is calm, reassuring, expressive, and natural.",
+    "focused": f"{CORE_TEACHER_PERSONA} She speaks confidently and at an unhurried, moderate pace. She emphasizes key educational concepts clearly and maintains a focused delivery rhythm with minimal emotional variance.",
+    "comfort": f"{CORE_TEACHER_PERSONA} She speaks softly and slowly, reassuring the student through calm, patient pacing and slightly longer, quiet pauses. She never sounds rushed or worried.",
+    "quiz": f"{CORE_TEACHER_PERSONA} She speaks clearly and enthusiastically, raising her intonation dynamically on questions and sounding excited and encouraging.",
+    "story": f"{CORE_TEACHER_PERSONA} She narrates like an experienced primary school teacher reading to children, varying her pitch naturally and creating suspense with natural pauses."
 }
 
 def prepare_speech_text(text: str) -> str:
     """
     Cleans raw LLM response text before sending it to the TTS engine.
     Removes Markdown, citations, and math markers to prevent robotic reading.
+    Preserves emotional punctuation, and translates list items/bullets.
     """
-    # 1. Remove inline brackets citations like [1] or [2]
-    cleaned = re.sub(r'\[\d+\]', '', text)
+    # 1. Convert lists and bullets to natural transition words line-by-line
+    lines = text.splitlines()
     
-    # 2. Remove LaTeX math wrappers: $$...$$ or $...$ or \(...\) or \[...\]
+    # Pre-count lists and bullets to find final boundaries
+    bullets = re.findall(r'^([•\-*])\s+', text, re.MULTILINE)
+    total_bullets = len(bullets)
+    list_matches = re.findall(r'^(\d+)\.\s+', text, re.MULTILINE)
+    total_lists = len(list_matches)
+    
+    processed_lines = []
+    bullet_index = 0
+    
+    for line in lines:
+        line_str = line.strip()
+        if not line_str:
+            processed_lines.append("")
+            continue
+            
+        # Check for numbered lists: e.g. "1. " or "2. "
+        num_match = re.match(r'^(\d+)\.\s+(.*)', line_str)
+        if num_match:
+            num = int(num_match.group(1))
+            content = num_match.group(2)
+            
+            markers = {
+                1: "First", 2: "Second", 3: "Third", 4: "Fourth", 5: "Fifth",
+                6: "Sixth", 7: "Seventh", 8: "Eighth", 9: "Ninth"
+            }
+            if num == total_lists and total_lists > 1:
+                marker = "Finally"
+            else:
+                marker = markers.get(num, "Next")
+            processed_lines.append(f"{marker}, {content}")
+            continue
+            
+        # Check for bullets: •, -, *
+        bullet_match = re.match(r'^([•\-*])\s+(.*)', line_str)
+        if bullet_match:
+            content = bullet_match.group(2)
+            bullet_index += 1
+            if bullet_index == 1:
+                marker = "First"
+            elif bullet_index == total_bullets and total_bullets > 1:
+                marker = "Finally"
+            else:
+                marker = "Also"
+            processed_lines.append(f"{marker}, {content}")
+            continue
+            
+        processed_lines.append(line_str)
+        
+    cleaned = "\n".join(processed_lines)
+    
+    # 2. Remove inline brackets citations like [1] or [2]
+    cleaned = re.sub(r'\[\d+\]', '', cleaned)
+    
+    # 3. Remove LaTeX math wrappers: $$...$$ or $...$ or \(...\) or \[...\]
     cleaned = re.sub(r'\$\$', '', cleaned)
     cleaned = re.sub(r'\$', '', cleaned)
     cleaned = re.sub(r'\\\(', '', cleaned)
@@ -154,11 +208,12 @@ def prepare_speech_text(text: str) -> str:
     cleaned = re.sub(r'\\\[', '', cleaned)
     cleaned = re.sub(r'\\\]', '', cleaned)
     
-    # 3. Remove markdown formatting like * or ** or # or `
+    # 4. Remove markdown formatting like * or ** or # or `
     cleaned = re.sub(r'[*_`#]', '', cleaned)
     
-    # 4. Remove leading/trailing spaces and collapse multiple whitespaces/newlines
-    cleaned = re.sub(r'\s+', ' ', cleaned).strip()
+    # 5. Remove leading/trailing spaces and collapse multiple whitespaces/newlines
+    cleaned = re.sub(r'[ \t]+', ' ', cleaned).strip()
+    cleaned = re.sub(r'\n+', ' ', cleaned).strip()
     return cleaned
 
 def classify_voice_style(student_message: str, assistant_response: str) -> str:
