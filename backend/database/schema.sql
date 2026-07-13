@@ -146,3 +146,17 @@ CREATE TABLE IF NOT EXISTS submissions (
     FOREIGN KEY(assignment_id) REFERENCES assignments(id),
     FOREIGN KEY(student_id) REFERENCES users(id)
 );
+
+CREATE TABLE IF NOT EXISTS student_memory (
+    student_id TEXT NOT NULL,
+    subject_id TEXT NOT NULL,
+    memory_type TEXT CHECK(memory_type IN ('ACADEMIC', 'BEHAVIOUR', 'PREFERENCE', 'PROFILE', 'GOAL')) NOT NULL,
+    concept TEXT NOT NULL,
+    details TEXT NOT NULL,
+    confidence REAL NOT NULL DEFAULT 1.0,
+    observation_count INTEGER NOT NULL DEFAULT 1,
+    updated_at TEXT NOT NULL,
+    PRIMARY KEY(student_id, subject_id, memory_type, concept),
+    FOREIGN KEY(student_id) REFERENCES users(id),
+    FOREIGN KEY(subject_id) REFERENCES subjects(id)
+);

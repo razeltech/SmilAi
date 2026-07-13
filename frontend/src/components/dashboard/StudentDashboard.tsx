@@ -43,6 +43,7 @@ export default function StudentDashboard({ user, subject }: StudentDashboardProp
   
   // AI Voice State
   const [voiceEngineMode, setVoiceEngineMode] = useState<'smiley' | 'robotic'>('smiley');
+  const [voiceAccent, setVoiceAccent] = useState<'andhra' | 'neutral' | 'american'>('andhra');
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const mediaRecorderRef = useRef<any>(null);
   const audioChunksRef = useRef<Blob[]>([]);
@@ -63,6 +64,38 @@ export default function StudentDashboard({ user, subject }: StudentDashboardProp
   // 4. Records States
   const [record, setRecord] = useState<StudentRecord | null>(null);
 
+  // Dynamic greeting generator using local system time and a random set of introductions
+  const getInitialGreetingMessage = (sid: string = ""): ChatMessage => {
+    const hours = new Date().getHours();
+    let timeGreeting = "Namaste";
+    if (hours >= 5 && hours < 12) {
+      timeGreeting = `Good morning, ${user.name}`;
+    } else if (hours >= 12 && hours < 17) {
+      timeGreeting = `Good afternoon, ${user.name}`;
+    } else if (hours >= 17 && hours < 23) {
+      timeGreeting = `Good evening, ${user.name}`;
+    } else {
+      timeGreeting = `Hello, my dear ${user.name}! Studying late tonight? Let me make things easy for you`;
+    }
+
+    const intros = [
+      `I am Smiley, your virtual teacher built by Razel Tech. I am so happy to teach and assist you with ${subject.name} today! What shall we learn or practice together?`,
+      `This is Smiley, your AI mentor powered by Razel Tech. It is a pleasure to guide you through ${subject.name} today. Let me know what you are studying or if you need help with any topic.`,
+      `Smiley here, ready to assist you! Together with Razel Tech, I'm here to support your learning in ${subject.name}. Tell me, what questions can we explore today?`,
+      `I'm Smiley, your virtual teacher. I am here to help you understand ${subject.name} step-by-step without any pressure. Where should we start our lesson today?`
+    ];
+
+    const randomIntro = intros[Math.floor(Math.random() * intros.length)];
+    
+    return {
+      id: `greeting-${Date.now()}`,
+      sessionId: sid || 'new',
+      role: 'assistant',
+      content: `${timeGreeting}! ${randomIntro}`,
+      timestamp: new Date().toISOString()
+    };
+  };
+
   // Fetch initial student subject data
   const fetchData = async () => {
     try {
@@ -75,7 +108,7 @@ export default function StudentDashboard({ user, subject }: StudentDashboardProp
         setCurrentSessionId(safeSessions[0].id);
         fetchSessionMessages(safeSessions[0].id);
       } else {
-        setMessages([]);
+        setMessages([getInitialGreetingMessage('')]);
         setCurrentSessionId('');
       }
 
@@ -107,7 +140,11 @@ export default function StudentDashboard({ user, subject }: StudentDashboardProp
     try {
       const res = await fetch(`/v1/chat/sessions/${sid}/messages`);
       const data = await res.json();
-      setMessages(data);
+      if (!Array.isArray(data) || data.length === 0) {
+        setMessages([getInitialGreetingMessage(sid)]);
+      } else {
+        setMessages(data);
+      }
     } catch (err) {
       console.error(err);
     }
@@ -283,7 +320,9 @@ export default function StudentDashboard({ user, subject }: StudentDashboardProp
     if (voiceEngineMode === 'smiley') {
       setIsSpeaking(true);
       try {
-        const res = await fetch(`/v1/voice/speak?text=${encodeURIComponent(cleanText)}`, {
+        const lastUserMsgObj = [...messages].reverse().find(m => m.role === 'user');
+        const lastUserMsg = lastUserMsgObj ? lastUserMsgObj.content : '';
+        const res = await fetch(`/v1/voice/speak?text=${encodeURIComponent(cleanText)}&user_message=${encodeURIComponent(lastUserMsg)}&voice_style=${warmVoice ? 'warm' : 'focused'}`, {
           method: 'POST'
         });
         if (res.ok) {
@@ -611,7 +650,7 @@ export default function StudentDashboard({ user, subject }: StudentDashboardProp
                   <button
                     onClick={() => {
                       setCurrentSessionId('');
-                      setMessages([]);
+                      setMessages([getInitialGreetingMessage('')]);
                     }}
                     className="text-xs font-semibold text-teal-600 hover:text-teal-700 bg-teal-50 px-2 py-1 rounded cursor-pointer"
                     id="chat-new-session-btn"
@@ -652,18 +691,8 @@ export default function StudentDashboard({ user, subject }: StudentDashboardProp
                   <span className="text-sm font-bold text-slate-800">Chatting with SmilAI</span>
                 </div>
                 <div className="flex items-center gap-3">
-                  {/* Voice Engine Toggle */}
-                  <select
-                    value={voiceEngineMode}
-                    onChange={(e) => setVoiceEngineMode(e.target.value as 'smiley' | 'robotic')}
-                    className="bg-white border border-slate-200 rounded px-2 py-1 text-xs text-slate-700 focus:outline-none focus:ring-1 focus:ring-teal-500 cursor-pointer shadow-sm"
-                    title="Select Voice Backend Engine"
-                  >
-                    <option value="smiley">SmilAI Voice Engine (Backend)</option>
-                    <option value="robotic">Native Browser Voice (Frontend)</option>
-                  </select>
                   
-                  {/* Warm Voice Mode Toggle */}
+                  {/* Voice Speaking Style Toggle */}
                   {speechEnabled && (
                     <button
                       onClick={() => setWarmVoice(!warmVoice)}
@@ -672,10 +701,10 @@ export default function StudentDashboard({ user, subject }: StudentDashboardProp
                           ? 'bg-amber-50 border-amber-200 text-amber-700 font-bold shadow-xs' 
                           : 'bg-slate-100 border-slate-200 text-slate-600'
                       }`}
-                      title="Warm Voice Mode uses a supportive, patient vocal tempo to encourage learning"
+                      title="Toggle between warm/patient teaching voice and focused/energetic revision voice"
                     >
                       <Award className={`h-3 w-3 ${warmVoice ? 'text-amber-500 animate-pulse' : ''}`} />
-                      <span>{warmVoice ? "Warm Voice Mode" : "Normal Voice"}</span>
+                      <span>{warmVoice ? "Warm Voice Mode" : "Focused Voice"}</span>
                     </button>
                   )}
                   {/* Speech Pulse Indicator & Stop Button */}

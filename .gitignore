@@ -26,3 +26,14 @@ playwright/.cache/
 screenshots/
 *.png
 *.webm
+
+# Database & Audio Cache
+*.db-journal
+*.wav
+temp_audio/
+backend/database/temp_audio/
+backend/database/smilai.db
+backend/database/smilai.db-journal
+backend/database/chroma_storage/
+database/
+backend/crash_log.txt
