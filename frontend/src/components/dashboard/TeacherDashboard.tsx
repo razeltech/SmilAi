@@ -391,7 +391,14 @@ export default function TeacherDashboard({ user, subject }: TeacherDashboardProp
 
   const handleOverrideScore = (sub: any) => {
     setSelectedSub(sub);
-    setOverrideScore(sub.score.toString());
+    let val = '';
+    if (sub.score !== null && sub.score !== undefined) {
+      const parsed = parseInt(sub.score);
+      if (!isNaN(parsed)) {
+        val = parsed.toString();
+      }
+    }
+    setOverrideScore(val);
     setOverrideFeedback(sub.feedback || '');
     setIsEditingGrade(true);
   };

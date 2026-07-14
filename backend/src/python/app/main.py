@@ -1,3 +1,15 @@
+import os
+import sys
+
+if sys.platform == "win32":
+    venv_base = os.path.dirname(os.path.dirname(sys.executable))
+    torch_lib = os.path.join(venv_base, "Lib", "site-packages", "torch", "lib")
+    if os.path.exists(torch_lib):
+        try:
+            os.add_dll_directory(torch_lib)
+        except Exception:
+            pass
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
