@@ -57,7 +57,10 @@ Please generate the JSON quiz with exactly {count} multiple choice questions."""
                 raise RuntimeError(f"Ollama returned status code {response.status_code}")
             
             data = response.json()
-            response_text = data.get("response", "[]").strip()
+            if "message" in data and "content" in data["message"]:
+                response_text = data["message"]["content"].strip()
+            else:
+                response_text = data.get("response", "[]").strip()
             print(f"DEBUG: Ollama raw response: {response_text}")
             try:
                 questions = json.loads(response_text)
