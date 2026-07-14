@@ -38,9 +38,11 @@ class AssessmentRepository:
         for r in rows:
             dict_row = dict(r)
             try:
-                dict_row["options"] = json.loads(dict_row.get("choices", "[]"))
+                parsed_choices = json.loads(dict_row.get("choices", "[]"))
             except Exception:
-                dict_row["options"] = []
+                parsed_choices = []
+            dict_row["choices"] = parsed_choices
+            dict_row["options"] = parsed_choices
             results.append(dict_row)
         return results
 
