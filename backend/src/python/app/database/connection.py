@@ -23,6 +23,21 @@ def get_db_connection():
     conn.execute("PRAGMA foreign_keys = ON;")
     return conn
 
+def ensure_column(conn, table: str, column: str, definition: str):
+    """Safely adds a column to a table if it does not already exist."""
+    cursor = conn.cursor()
+    cursor.execute(f"PRAGMA table_info({table});")
+    rows = cursor.fetchall()
+    columns = []
+    for r in rows:
+        if isinstance(r, dict):
+            columns.append(r.get("name"))
+        else:
+            columns.append(r[1])
+    if column not in columns:
+        conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition};")
+        print(f"Migration: Added column '{column}' to table '{table}'.")
+
 def init_db():
     """Initializes the database using the unified schema.sql file."""
     if not os.path.exists(SCHEMA_PATH):
@@ -35,6 +50,11 @@ def init_db():
     conn = get_db_connection()
     try:
         conn.executescript(schema_script)
+        
+        # Run database migrations for Milestone A columns
+        ensure_column(conn, "documents", "status", "TEXT CHECK(status IN ('pending', 'approved', 'archived')) NOT NULL DEFAULT 'approved'")
+        ensure_column(conn, "assessments", "deleted_at", "TEXT")
+        ensure_column(conn, "assignments", "deleted_at", "TEXT")
         
         # Seed default data if none exists
         org = conn.execute("SELECT id FROM organizations LIMIT 1").fetchone()

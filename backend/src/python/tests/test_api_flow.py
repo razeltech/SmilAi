@@ -33,10 +33,18 @@ def test_registration_flow():
 
 def test_chat_streaming_endpoint_exists():
     """Validates the chat streaming endpoint is reachable and accepts standard ChatRequests."""
+    from app.database.connection import get_db_connection
+    conn = get_db_connection()
+    user = conn.execute("SELECT id FROM users WHERE role = 'student' LIMIT 1").fetchone()
+    subject = conn.execute("SELECT id FROM subjects LIMIT 1").fetchone()
+    user_id = user["id"] if user else "student_1"
+    subject_id = subject["id"] if subject else "subject_1"
+    conn.close()
+
     payload = {
-        "session_id": "test_session",
-        "user_id": "test_user",
-        "subject_id": "science_101",
+        "session_id": "new",
+        "user_id": user_id,
+        "subject_id": subject_id,
         "message": "Why is the sky blue?"
     }
     # Using POST /stream

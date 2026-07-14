@@ -51,6 +51,7 @@ CREATE TABLE IF NOT EXISTS documents (
     type TEXT CHECK(type IN ('library', 'personal')) NOT NULL,
     chunk_count INTEGER NOT NULL DEFAULT 0,
     uploaded_at TEXT NOT NULL,
+    status TEXT CHECK(status IN ('pending', 'approved', 'archived')) NOT NULL DEFAULT 'approved',
     FOREIGN KEY(subject_id) REFERENCES subjects(id),
     FOREIGN KEY(org_id) REFERENCES organizations(id)
 );
@@ -96,6 +97,7 @@ CREATE TABLE IF NOT EXISTS assessments (
     topic TEXT NOT NULL,
     difficulty TEXT NOT NULL,
     created_at TEXT NOT NULL,
+    deleted_at TEXT,
     FOREIGN KEY(subject_id) REFERENCES subjects(id)
 );
 
@@ -130,6 +132,7 @@ CREATE TABLE IF NOT EXISTS assignments (
     description TEXT NOT NULL,
     rubric TEXT NOT NULL,
     due_date TEXT NOT NULL,
+    deleted_at TEXT,
     FOREIGN KEY(subject_id) REFERENCES subjects(id)
 );
 

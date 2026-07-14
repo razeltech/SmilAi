@@ -1,21 +1,28 @@
 import sys
-import types
 import pytest
 from unittest.mock import MagicMock
 
 # Create mock modules
 mock_torch = MagicMock()
 mock_st = MagicMock()
-mock_st.CrossEncoder = MagicMock
 
 mock_model_instance = MagicMock()
 mock_encode_result = MagicMock()
-mock_encode_result.tolist.return_value = [0.1, 0.2, 0.3]
+mock_encode_result.tolist.return_value = [[0.1] * 384]
 mock_model_instance.encode.return_value = mock_encode_result
+
+mock_cross_encoder_instance = MagicMock()
+mock_cross_encoder_instance.predict.return_value = [0.5] * 100
+mock_st.CrossEncoder.return_value = mock_cross_encoder_instance
 mock_st.SentenceTransformer.return_value = mock_model_instance
 
 mock_chroma = MagicMock()
-mock_chroma.PersistentClient = MagicMock
+mock_collection = MagicMock()
+mock_collection.query.return_value = {
+    'documents': [['This is a sample chapter text about Quadratic Equations. It explains the quadratic formula.']],
+    'metadatas': [[{'doc_id': '123', 'org_id': 'cad61a6c-cb04-4d08-a103-7deeafb84837', 'subject_id': 'a7f984b9-ae55-41af-ba93-0bced1614c57', 'chunk_index': 0}]]
+}
+mock_chroma.PersistentClient.return_value.get_or_create_collection.return_value = mock_collection
 
 mock_whisper = MagicMock()
 mock_whisper.WhisperModel = MagicMock
@@ -31,7 +38,7 @@ mock_piper.voice = MagicMock()
 sys.modules['piper'] = mock_piper
 sys.modules['piper.voice'] = mock_piper.voice
 
-# Now it is safe to import the app without triggering PyTorch >= 2.4 crashes
+# Now it is safe to import the app
 from app.main import app
 from fastapi.testclient import TestClient
 

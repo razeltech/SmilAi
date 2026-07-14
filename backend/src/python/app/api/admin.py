@@ -1,10 +1,46 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlite3 import Connection
+from pydantic import BaseModel
+from typing import Optional
+import uuid
+from datetime import datetime
 
 from ..database.connection import get_db
+from ..documents.service import DocumentRepository, DocumentService
+from ..assessment.service import AssessmentRepository, AssessmentService
 
 router = APIRouter(tags=["Admin & Data Routes"])
 
+# Pydantic Request Schemas
+class BulkDocItem(BaseModel):
+    name: str
+    content: str
+    parserType: str = "auto"
+    type: str = "library"
+
+class BulkDocRequest(BaseModel):
+    documents: list[BulkDocItem]
+
+class DocumentPatch(BaseModel):
+    status: str
+
+class AssessmentPostRequest(BaseModel):
+    topic: str
+    difficulty: str
+    questionCount: int
+
+class AssignmentPostRequest(BaseModel):
+    subjectId: str
+    title: str
+    description: str
+    rubric: str
+    dueDate: str
+
+class OverrideGradeRequest(BaseModel):
+    score: int
+    feedback: str
+
+# GET Endpoints
 @router.get("/org-settings")
 def get_org_settings(db: Connection = Depends(get_db)):
     """Returns the first organization's settings."""
@@ -50,7 +86,6 @@ def get_subjects(userId: str = None, role: str = None, db: Connection = Depends(
             WHERE e.user_id = ?
         """, (userId,)).fetchall()
 
-    # Map snake_case DB columns to camelCase for frontend
     return [
         {
             "id": s["id"],
@@ -64,26 +99,87 @@ def get_subjects(userId: str = None, role: str = None, db: Connection = Depends(
         for s in subjects
     ]
 
-@router.get("/subjects/{subjectId}/assignments")
-def get_subject_assignments(subjectId: str, db: Connection = Depends(get_db)):
-    """Returns all assignments for a subject."""
-    rows = db.execute("SELECT * FROM assignments WHERE subject_id = ? ORDER BY due_date DESC", (subjectId,)).fetchall()
+# CRUD - Documents
+@router.get("/subjects/{subjectId}/documents")
+def get_subject_documents(subjectId: str, db: Connection = Depends(get_db)):
+    """Returns all active uploaded documents for a subject."""
+    rows = DocumentRepository.list_active(db, subjectId)
     return [
         {
             "id": r["id"],
             "subjectId": r["subject_id"],
-            "title": r["title"],
-            "description": r["description"],
-            "rubric": r["rubric"],
-            "dueDate": r["due_date"]
+            "orgId": r["org_id"],
+            "name": r["name"],
+            "type": r["type"],
+            "chunkCount": r["chunk_count"],
+            "uploadedAt": r["uploaded_at"],
+            "status": r.get("status", "approved")
         }
         for r in rows
     ]
 
+@router.post("/subjects/{subjectId}/documents/bulk")
+def upload_subject_documents_bulk(subjectId: str, req: BulkDocRequest, db: Connection = Depends(get_db)):
+    """Transactionally ingests multiple documents for a subject."""
+    subject = db.execute("SELECT org_id FROM subjects WHERE id = ?", (subjectId,)).fetchone()
+    if not subject:
+        raise HTTPException(status_code=404, detail="Subject not found")
+    org_id = subject["org_id"]
+    
+    docs_processed = []
+    total_chunks = 0
+    for doc in req.documents:
+        try:
+            res = DocumentService.ingest_parsed_document(
+                filename=doc.name,
+                content=doc.content,
+                org_id=org_id,
+                subject_id=subjectId
+            )
+            total_chunks += res["total_chunks"]
+            docs_processed.append({
+                "id": res["doc_id"],
+                "name": doc.name,
+                "status": "pending"
+            })
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Failed to ingest doc '{doc.name}': {str(e)}")
+            
+    return {
+        "processedCount": len(docs_processed),
+        "totalChunks": total_chunks,
+        "documents": docs_processed
+    }
+
+@router.patch("/documents/{id}")
+def patch_document(id: str, req: DocumentPatch, db: Connection = Depends(get_db)):
+    """Updates a document's status (approved, archived, pending)."""
+    success = DocumentRepository.patch_status(db, id, req.status)
+    if not success:
+        raise HTTPException(status_code=404, detail="Document not found")
+    return {"message": "Success", "status": req.status}
+
+@router.post("/documents/{id}/approve")
+def approve_document(id: str, db: Connection = Depends(get_db)):
+    """Convenience endpoint specifically called by frontend to approve document."""
+    success = DocumentRepository.patch_status(db, id, "approved")
+    if not success:
+        raise HTTPException(status_code=404, detail="Document not found")
+    return {"message": "Success", "status": "approved"}
+
+@router.delete("/documents/{id}")
+def delete_document(id: str, db: Connection = Depends(get_db)):
+    """Soft deletes a document by setting status = 'archived'."""
+    success = DocumentRepository.soft_delete(db, id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Document not found")
+    return {"message": "Success"}
+
+# CRUD - Assessments
 @router.get("/subjects/{subjectId}/assessments")
 def get_subject_assessments(subjectId: str, db: Connection = Depends(get_db)):
-    """Returns all assessments for a subject."""
-    rows = db.execute("SELECT * FROM assessments WHERE subject_id = ? ORDER BY created_at DESC", (subjectId,)).fetchall()
+    """Returns all active assessments for a subject."""
+    rows = AssessmentRepository.list_active(db, subjectId)
     return [
         {
             "id": r["id"],
@@ -97,23 +193,104 @@ def get_subject_assessments(subjectId: str, db: Connection = Depends(get_db)):
         for r in rows
     ]
 
-@router.get("/subjects/{subjectId}/documents")
-def get_subject_documents(subjectId: str, db: Connection = Depends(get_db)):
-    """Returns all uploaded documents/syllabus for a subject."""
-    rows = db.execute("SELECT * FROM documents WHERE subject_id = ? ORDER BY uploaded_at DESC", (subjectId,)).fetchall()
+@router.post("/subjects/{subjectId}/assessments")
+async def generate_subject_assessment(subjectId: str, req: AssessmentPostRequest, db: Connection = Depends(get_db)):
+    """Triggers LLM generation of a multiple choice quiz and saves to database."""
+    subject = db.execute("SELECT org_id FROM subjects WHERE id = ?", (subjectId,)).fetchone()
+    if not subject:
+        raise HTTPException(status_code=404, detail="Subject not found")
+    org_id = subject["org_id"]
+    
+    try:
+        res = await AssessmentService.generate_and_save_assessment(
+            org_id=org_id,
+            subject_id=subjectId,
+            topic=req.topic,
+            difficulty=req.difficulty,
+            question_count=req.questionCount
+        )
+        return res
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Assessment generation failed: {str(e)}")
+
+@router.get("/assessments/{id}")
+def get_assessment_details(id: str, db: Connection = Depends(get_db)):
+    """Returns assessment details along with its questions."""
+    assessment = AssessmentRepository.get_by_id(db, id)
+    if not assessment:
+        raise HTTPException(status_code=404, detail="Assessment not found")
+    questions = AssessmentRepository.get_questions(db, id)
+    return {
+        "id": assessment["id"],
+        "subjectId": assessment["subject_id"],
+        "name": assessment["name"],
+        "questionCount": assessment["question_count"],
+        "topic": assessment["topic"],
+        "difficulty": assessment["difficulty"],
+        "createdAt": assessment["created_at"],
+        "questions": questions
+    }
+
+@router.delete("/assessments/{id}")
+def delete_assessment(id: str, db: Connection = Depends(get_db)):
+    """Soft deletes an assessment."""
+    success = AssessmentRepository.soft_delete(db, id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Assessment not found")
+    return {"message": "Success"}
+
+# CRUD - Assignments
+@router.get("/subjects/{subjectId}/assignments")
+def get_subject_assignments(subjectId: str, db: Connection = Depends(get_db)):
+    """Returns all active assignments for a subject."""
+    rows = db.execute(
+        "SELECT * FROM assignments WHERE subject_id = ? AND deleted_at IS NULL ORDER BY due_date DESC",
+        (subjectId,)
+    ).fetchall()
     return [
         {
             "id": r["id"],
             "subjectId": r["subject_id"],
-            "orgId": r["org_id"],
-            "name": r["name"],
-            "type": r["type"],
-            "chunkCount": r["chunk_count"],
-            "uploadedAt": r["uploaded_at"]
+            "title": r["title"],
+            "description": r["description"],
+            "rubric": r["rubric"],
+            "dueDate": r["due_date"]
         }
         for r in rows
     ]
 
+@router.post("/assignments")
+def create_assignment(req: AssignmentPostRequest, db: Connection = Depends(get_db)):
+    """Creates a new programming assignment."""
+    assign_id = str(uuid.uuid4())
+    db.execute(
+        "INSERT INTO assignments (id, subject_id, title, description, rubric, due_date) VALUES (?, ?, ?, ?, ?, ?)",
+        (assign_id, req.subjectId, req.title, req.description, req.rubric, req.dueDate)
+    )
+    db.commit()
+    return {
+        "id": assign_id,
+        "subjectId": req.subjectId,
+        "title": req.title,
+        "description": req.description,
+        "rubric": req.rubric,
+        "dueDate": req.dueDate
+    }
+
+@router.delete("/assignments/{id}")
+def delete_assignment(id: str, db: Connection = Depends(get_db)):
+    """Soft deletes an assignment."""
+    now_str = datetime.utcnow().isoformat()
+    cursor = db.execute(
+        "UPDATE assignments SET deleted_at = ? WHERE id = ?",
+        (now_str, id)
+    )
+    db.commit()
+    if cursor.rowcount == 0:
+        raise HTTPException(status_code=404, detail="Assignment not found")
+    return {"message": "Success"}
+
+# Grade Overrides & Submissions
 @router.get("/subjects/{subjectId}/submissions")
 def get_subject_submissions(subjectId: str, db: Connection = Depends(get_db)):
     """Returns all code submissions for assignments in a subject."""
@@ -121,7 +298,7 @@ def get_subject_submissions(subjectId: str, db: Connection = Depends(get_db)):
         SELECT sub.*, a.title AS assignment_title 
         FROM submissions sub
         JOIN assignments a ON sub.assignment_id = a.id
-        WHERE a.subject_id = ?
+        WHERE a.subject_id = ? AND a.deleted_at IS NULL
         ORDER BY sub.submitted_at DESC
     """, (subjectId,)).fetchall()
     return [
@@ -139,6 +316,19 @@ def get_subject_submissions(subjectId: str, db: Connection = Depends(get_db)):
         for r in rows
     ]
 
+@router.post("/submissions/{submissionId}/override")
+def override_grade(submissionId: str, req: OverrideGradeRequest, db: Connection = Depends(get_db)):
+    """Allows teachers to override submission grades and feedback."""
+    cursor = db.execute(
+        "UPDATE submissions SET score = ?, feedback = ?, teacher_override = 1 WHERE id = ?",
+        (req.score, req.feedback, submissionId)
+    )
+    db.commit()
+    if cursor.rowcount == 0:
+        raise HTTPException(status_code=404, detail="Submission not found")
+    return {"message": "Success", "score": req.score, "feedback": req.feedback}
+
+# Other general routes
 @router.get("/grade-bands")
 def get_grade_bands(db: Connection = Depends(get_db)):
     """Returns all grade bands."""
@@ -174,8 +364,8 @@ def get_user_profile(user_id: str, db: Connection = Depends(get_db)):
 
 @router.get("/assignments")
 def get_assignments(db: Connection = Depends(get_db)):
-    """Returns all assignments across all subjects."""
-    rows = db.execute("SELECT * FROM assignments ORDER BY due_date DESC").fetchall()
+    """Returns all active assignments across all subjects."""
+    rows = db.execute("SELECT * FROM assignments WHERE deleted_at IS NULL ORDER BY due_date DESC").fetchall()
     return [
         {
             "id": r["id"], "subjectId": r["subject_id"], "title": r["title"],
@@ -186,8 +376,8 @@ def get_assignments(db: Connection = Depends(get_db)):
 
 @router.get("/assessments")
 def get_assessments(db: Connection = Depends(get_db)):
-    """Returns all assessments across all subjects."""
-    rows = db.execute("SELECT * FROM assessments ORDER BY created_at DESC").fetchall()
+    """Returns all active assessments across all subjects."""
+    rows = db.execute("SELECT * FROM assessments WHERE deleted_at IS NULL ORDER BY created_at DESC").fetchall()
     return [
         {
             "id": r["id"], "subjectId": r["subject_id"], "name": r["name"],
@@ -200,21 +390,17 @@ def get_assessments(db: Connection = Depends(get_db)):
 @router.get("/teacher/{userId}/pending-approval")
 def get_pending_approvals(userId: str, db: Connection = Depends(get_db)):
     """Returns pending profile approvals for a teacher."""
-    # Profile approvals table doesn't exist yet — return empty for now
     return []
 
 @router.get("/students/{userId}/subjects/{subjectId}/record")
 def get_student_record(userId: str, subjectId: str, db: Connection = Depends(get_db)):
     """Aggregates a student's academic record for a specific subject."""
-    # Get student name
     student = db.execute("SELECT name FROM users WHERE id = ?", (userId,)).fetchone()
     student_name = student["name"] if student else "Student"
 
-    # Get subject name
     subject = db.execute("SELECT name FROM subjects WHERE id = ?", (subjectId,)).fetchone()
     subject_name = subject["name"] if subject else "Subject"
 
-    # Aggregate assessment scores
     assessment_rows = db.execute("""
         SELECT a.name AS assessment_name, 
                SUM(sa.score) AS total_score,
@@ -223,17 +409,16 @@ def get_student_record(userId: str, subjectId: str, db: Connection = Depends(get
         FROM student_answers sa
         JOIN questions q ON sa.question_id = q.id
         JOIN assessments a ON q.assessment_id = a.id
-        WHERE sa.student_id = ? AND a.subject_id = ?
+        WHERE sa.student_id = ? AND a.subject_id = ? AND a.deleted_at IS NULL
         GROUP BY a.id
         ORDER BY date DESC
     """, (userId, subjectId)).fetchall()
 
-    # Aggregate code submission scores
     submission_rows = db.execute("""
         SELECT a.title, sub.score, sub.submitted_at AS date
         FROM submissions sub
         JOIN assignments a ON sub.assignment_id = a.id
-        WHERE sub.student_id = ? AND a.subject_id = ?
+        WHERE sub.student_id = ? AND a.subject_id = ? AND a.deleted_at IS NULL
         ORDER BY sub.submitted_at DESC
     """, (userId, subjectId)).fetchall()
 

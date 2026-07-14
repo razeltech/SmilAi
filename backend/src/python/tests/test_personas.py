@@ -67,10 +67,18 @@ class TestStudentPersona:
     
     def test_student_chat_stream(self, client):
         """Validates the core RAG streaming endpoint for student queries."""
+        from app.database.connection import get_db_connection
+        conn = get_db_connection()
+        user = conn.execute("SELECT id FROM users WHERE role = 'student' LIMIT 1").fetchone()
+        subject = conn.execute("SELECT id FROM subjects LIMIT 1").fetchone()
+        user_id = user["id"] if user else "student_1"
+        subject_id = subject["id"] if subject else "subject_1"
+        conn.close()
+
         payload = {
-            "session_id": "test_session",
-            "user_id": "student_123",
-            "subject_id": "math_101",
+            "session_id": "new",
+            "user_id": user_id,
+            "subject_id": subject_id,
             "message": "Can you explain Pythagorean theorem?"
         }
         response = client.post("/v1/chat/stream", json=payload)
@@ -92,8 +100,16 @@ class TestStudentPersona:
 
     def test_student_record(self, client):
         """Validates the student can fetch their academic record/grades."""
-        response = client.get("/v1/students/student_123/subjects/math_101/record")
+        from app.database.connection import get_db_connection
+        conn = get_db_connection()
+        user = conn.execute("SELECT id FROM users WHERE role = 'student' LIMIT 1").fetchone()
+        subject = conn.execute("SELECT id FROM subjects LIMIT 1").fetchone()
+        user_id = user["id"] if user else "student_1"
+        subject_id = subject["id"] if subject else "subject_1"
+        conn.close()
+
+        response = client.get(f"/v1/students/{user_id}/subjects/{subject_id}/record")
         assert response.status_code == 200
         data = response.json()
-        assert "grade" in data
-        assert "progress" in data
+        assert "averageScore" in data
+        assert "assessmentsCompleted" in data
