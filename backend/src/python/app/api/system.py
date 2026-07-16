@@ -10,6 +10,16 @@ def health_check():
     Returns the overall health and capabilities of the platform.
     Used by the frontend to selectively enable/disable UI features.
     """
-    status = capabilities.to_dict()
-    status["deployment"] = active_profile.__class__.__name__
-    return status
+    return capabilities.to_dict()
+
+@router.get("/version")
+def system_version():
+    """
+    Returns the version, active git commit, and active profile for deployment debugging.
+    """
+    return {
+        "version": "1.3.5",
+        "git": "d3f862c",
+        "profile": active_profile.__class__.__name__,
+        "build": "release"
+    }

@@ -15,15 +15,38 @@ class SystemCapabilities:
         self.translation = False    # v1.4 feature
 
     def to_dict(self) -> dict:
+        from .config import active_profile
         return {
-            "sqlite": "ok" if self.sqlite else "missing",
-            "chroma": "ok" if self.chroma else "missing",
-            "ollama": "ok" if self.ollama else "missing",
-            "memory": "enabled" if self.memory else "disabled",
-            "learning": "enabled" if self.learning else "disabled",
-            "analytics": "enabled" if self.analytics else "disabled",
-            "voice": "ok" if self.voice else "missing",
-            "translation": "enabled" if self.translation else "disabled"
+            "voice": {
+                "enabled": self.voice,
+                "engine": active_profile.tts_engine,
+                "profile": active_profile.__class__.__name__
+            },
+            "llm": {
+                "enabled": self.ollama,
+                "engine": "ollama",
+                "model": active_profile.llm_model
+            },
+            "embeddings": {
+                "enabled": self.chroma,
+                "engine": "chroma",
+                "model": active_profile.embedding_model
+            },
+            "translation": {
+                "enabled": self.translation,
+                "engine": "none",
+                "profile": active_profile.__class__.__name__
+            },
+            "learning": {
+                "enabled": self.learning,
+                "engine": "deterministic",
+                "profile": active_profile.__class__.__name__
+            },
+            "database": {
+                "enabled": self.sqlite,
+                "engine": "sqlite"
+            },
+            "deployment": active_profile.__class__.__name__
         }
 
 # Global singleton

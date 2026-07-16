@@ -15,8 +15,8 @@ def test_system_health():
     assert response.status_code == 200
     data = response.json()
     assert "deployment" in data
-    assert "ollama" in data
-    assert "sqlite" in data
+    assert "llm" in data
+    assert "database" in data
 
 def test_guardrails_size_limit():
     huge_input = "a" * (MAX_INPUT_LENGTH + 10)
