@@ -66,14 +66,19 @@ def initialize_tts_engine():
                 if free_mem > 2 * 1024 * 1024 * 1024:
                     from parler_tts import ParlerTTSForConditionalGeneration
                     from transformers import AutoTokenizer
-                    logger.info("GPU detected with >2GB VRAM. Loading ai4bharat/indic-parler-tts...")
-                    parler_model = ParlerTTSForConditionalGeneration.from_pretrained("ai4bharat/indic-parler-tts").to("cuda")
-                    parler_tokenizer = AutoTokenizer.from_pretrained("ai4bharat/indic-parler-tts")
+                    logger.info("GPU detected with >2GB VRAM. Loading ai4bharat/indic-parler-tts locally...")
+                    # Enforce local_files_only=True to prevent internet downloads
+                    parler_model = ParlerTTSForConditionalGeneration.from_pretrained("ai4bharat/indic-parler-tts", local_files_only=True).to("cuda")
+                    parler_tokenizer = AutoTokenizer.from_pretrained("ai4bharat/indic-parler-tts", local_files_only=True)
                     logger.info("Indic Parler-TTS loaded successfully on GPU.")
                 else:
                     logger.warning(f"Not enough VRAM for Parler-TTS (Free: {free_mem/(1024**3):.2f}GB). Falling back to Piper.")
             else:
                 logger.warning("No GPU detected for Parler-TTS. Skipping to fallback.")
+        except OSError: # Huggingface raises OSError if local_files_only=True and not found
+            logger.warning("Parler-TTS models not found locally. Please run Offline Installer.")
+            parler_model = None
+            parler_tokenizer = None
         except Exception as e:
             import traceback
             tts_init_error = f"Parler error: {traceback.format_exc()}"
@@ -88,14 +93,11 @@ def initialize_tts_engine():
             onnx_path = os.path.join(PIPER_CACHE_DIR, f"{PIPER_VOICE_NAME}.onnx")
             json_path = os.path.join(PIPER_CACHE_DIR, f"{PIPER_VOICE_NAME}.onnx.json")
             
-            if not os.path.exists(onnx_path):
-                logger.info(f"Downloading Piper Fallback Model ({PIPER_VOICE_NAME})...")
-                urllib.request.urlretrieve(PIPER_ONNX_URL, onnx_path)
-                urllib.request.urlretrieve(PIPER_JSON_URL, json_path)
-                logger.info("Piper Download complete.")
-                
-            piper_voice = PiperVoice.load(onnx_path, config_path=json_path)
-            logger.info("Piper TTS Fallback loaded successfully.")
+            if not os.path.exists(onnx_path) or not os.path.exists(json_path):
+                logger.warning(f"Piper models not found at {PIPER_CACHE_DIR}. Disabling Voice capabilities.")
+            else:
+                piper_voice = PiperVoice.load(onnx_path, config_path=json_path)
+                logger.info("Piper TTS Fallback loaded successfully.")
         except Exception as e:
             import traceback
             import sys
@@ -103,9 +105,22 @@ def initialize_tts_engine():
             logger.error(f"Piper TTS Fallback unavailable ({e}).")
         
     tts_engine_initialized = True
+    
+    # Register global capabilities
+    from ..core.capabilities import capabilities
+    if parler_model is None and piper_voice is None:
+        capabilities.voice = False
+    else:
+        capabilities.voice = True
+
+def require_voice_capability():
+    from ..core.capabilities import capabilities
+    if not capabilities.voice:
+        raise HTTPException(status_code=503, detail="Voice subsystem is disabled or missing models.")
 
 @router.post("/transcribe")
 async def transcribe_audio(file: UploadFile = File(...)):
+    require_voice_capability()
     """
     Takes an audio file from the frontend (e.g. WebM or WAV)
     and converts it instantly to text using the local Whisper model.
@@ -285,6 +300,7 @@ def generate_speech(text: str, user_message: str = "", voice_style: str = "auto"
     Falls back to Piper TTS if Parler is unavailable. Returns a WAV audio file.
     Supports dynamic speaking styles, sentence segmentation caching, and WAV stitching.
     """
+    require_voice_capability()
     initialize_tts_engine()
     
     # 1. Clean the text using the Speech Preparation Layer

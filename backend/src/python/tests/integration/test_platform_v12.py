@@ -14,9 +14,9 @@ def test_system_health():
     response = client.get("/v1/system/health")
     assert response.status_code == 200
     data = response.json()
-    assert "Profile" in data
-    assert "Ollama" in data
-    assert "SQLite" in data
+    assert "deployment" in data
+    assert "ollama" in data
+    assert "sqlite" in data
 
 def test_guardrails_size_limit():
     huge_input = "a" * (MAX_INPUT_LENGTH + 10)

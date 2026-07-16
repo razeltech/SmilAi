@@ -17,7 +17,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 
 from .core.startup import boot_system
-from .api import auth, chat, content, assessments, voice, admin, system, learning
+from .api import auth, chat, content, assessments, voice, system, learning
+from .api.admin import users, subjects, enrollments, documents, assessments as admin_assessments, assignments
 from .rag import coding_brain
 
 @asynccontextmanager
@@ -52,9 +53,16 @@ app.include_router(content.router, prefix="/v1")
 app.include_router(assessments.router, prefix="/v1")
 app.include_router(coding_brain.router, prefix="/v1")
 app.include_router(voice.router, prefix="/v1")
-app.include_router(admin.router, prefix="/v1")
 app.include_router(system.router, prefix="/v1")
 app.include_router(learning.router, prefix="/v1")
+
+# Admin Routers
+app.include_router(users.router, prefix="/v1")
+app.include_router(subjects.router, prefix="/v1")
+app.include_router(enrollments.router, prefix="/v1")
+app.include_router(documents.router, prefix="/v1")
+app.include_router(admin_assessments.router, prefix="/v1")
+app.include_router(assignments.router, prefix="/v1")
 
 @app.get("/health")
 def health_check():

@@ -10,8 +10,13 @@ from .prompt_builder import PROMPT_BUILDER
 
 from ..core.config import active_profile
 
-OLLAMA_URL = os.environ.get("OLLAMA_URL", "http://localhost:11434/api/chat")
+from .providers import OllamaProvider
+
+OLLAMA_URL = os.environ.get("OLLAMA_URL", "http://localhost:11434")
 LLM_MODEL = os.environ.get("OLLAMA_MODEL", active_profile.llm_model)
+
+# Default global provider
+default_provider = OllamaProvider(OLLAMA_URL)
 
 async def generate_rag_response_stream(
     query: str, 
@@ -20,12 +25,16 @@ async def generate_rag_response_stream(
     is_conversational: bool = False,
     student_id: str = "",
     subject_id: str = "",
-    metrics_out: dict = None
+    metrics_out: dict = None,
+    provider = None
 ):
     """
-    Streams the response directly from the local Ollama instance via HTTP Chat API.
+    Streams the response directly using the provided InferenceProvider (defaults to Ollama).
     Uses PromptBuilder to assemble the payload, and outputs tokens.
     """
+    if provider is None:
+        provider = default_provider
+        
     # 1. Select the dynamic temperature and prompt mode
     temp = 0.7 if is_conversational else 0.3
     
@@ -53,7 +62,6 @@ async def generate_rag_response_stream(
     payload = {
         "model": LLM_MODEL,
         "messages": messages,
-        "stream": True,
         "options": {
             "temperature": temp,
             "num_ctx": 8192,
@@ -61,26 +69,9 @@ async def generate_rag_response_stream(
         }
     }
     
-    # 3. Stream from Ollama chat endpoint
-    async with httpx.AsyncClient(timeout=60.0) as client:
-        async with client.stream("POST", OLLAMA_URL, json=payload) as response:
-            if response.status_code != 200:
-                yield "I'm having a little trouble thinking right now. Let's try again in a moment!"
-                return
-                
-            async for line in response.aiter_lines():
-                if line:
-                    try:
-                        data = json.loads(line)
-                        if "message" in data and "content" in data["message"]:
-                            yield data["message"]["content"]
-                        if data.get("done") is True:
-                            if metrics_out is not None:
-                                metrics_out["prompt_tokens"] = data.get("prompt_eval_count", 0)
-                                metrics_out["completion_tokens"] = data.get("eval_count", 0)
-                                metrics_out["total_tokens"] = data.get("prompt_eval_count", 0) + data.get("eval_count", 0)
-                    except json.JSONDecodeError:
-                        continue
+    # 4. Stream from Provider
+    async for chunk in provider.generate_stream(payload):
+        yield chunk
 
 class RewriteReason:
     NO_CHANGE = "no_change"
@@ -199,11 +190,11 @@ Standalone Search Query:"""
     # Perform rewriting under a 3.0s timeout
     try:
         async def fetch_rewrite():
-            async with httpx.AsyncClient(timeout=5.0) as client:
-                response = await client.post(OLLAMA_URL, json=payload)
-                if response.status_code == 200:
-                    return response.json()
-                return None
+            from .inference import default_provider
+            data = await default_provider.generate(payload)
+            if data:
+                return data
+            return None
                 
         data = await asyncio.wait_for(fetch_rewrite(), timeout=3.0)
         latency_ms = int((time.perf_counter() - start_time) * 1000)

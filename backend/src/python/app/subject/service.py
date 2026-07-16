@@ -31,6 +31,56 @@ def get_subject(db: Connection, subject_id: str) -> Optional[Dict[str, Any]]:
     ).fetchone()
     return row
 
+def get_subjects_list(db: Connection, user_id: str = None, role: str = None) -> List[Dict[str, Any]]:
+    if role == "admin" or not user_id:
+        subjects = db.execute("""
+            SELECT s.id, s.org_id, s.grade_band_id, s.name, s.teacher_id, s.category, s.supports_projects, s.is_active,
+                   gb.name AS grade_band_name, u.name AS teacher_name
+            FROM subjects s
+            LEFT JOIN grade_bands gb ON s.grade_band_id = gb.id
+            LEFT JOIN users u ON s.teacher_id = u.id
+        """).fetchall()
+    elif role == "teacher":
+        subjects = db.execute("""
+            SELECT s.id, s.org_id, s.grade_band_id, s.name, s.teacher_id, s.category, s.supports_projects, s.is_active,
+                   gb.name AS grade_band_name, u.name AS teacher_name
+            FROM subjects s
+            LEFT JOIN grade_bands gb ON s.grade_band_id = gb.id
+            LEFT JOIN users u ON s.teacher_id = u.id
+            WHERE s.teacher_id = ?
+        """, (user_id,)).fetchall()
+    else:
+        # Student — return enrolled subjects
+        subjects = db.execute("""
+            SELECT s.id, s.org_id, s.grade_band_id, s.name, s.teacher_id, s.category, s.supports_projects, s.is_active,
+                   gb.name AS grade_band_name, u.name AS teacher_name
+            FROM subjects s
+            JOIN enrollments e ON e.subject_id = s.id
+            LEFT JOIN grade_bands gb ON s.grade_band_id = gb.id
+            LEFT JOIN users u ON s.teacher_id = u.id
+            WHERE e.user_id = ?
+        """, (user_id,)).fetchall()
+
+    return [
+        {
+            "id": s["id"],
+            "orgId": s["org_id"],
+            "gradeBandId": s["grade_band_id"],
+            "name": s["name"],
+            "teacherId": s["teacher_id"],
+            "category": s.get("category", "GENERAL"),
+            "supportsProjects": s.get("supports_projects", 0),
+            "isActive": s.get("is_active", 1),
+            "gradeBandName": s.get("grade_band_name", ""),
+            "teacherName": s.get("teacher_name", "")
+        }
+        for s in subjects
+    ]
+
+def get_grade_bands_list(db: Connection) -> List[Dict[str, Any]]:
+    rows = db.execute("SELECT * FROM grade_bands").fetchall()
+    return [{"id": r["id"], "orgId": r["org_id"], "name": r["name"]} for r in rows]
+
 def update_subject(
     db: Connection,
     subject_id: str,
