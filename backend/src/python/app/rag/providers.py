@@ -3,8 +3,9 @@ import httpx
 import json
 import logging
 from typing import AsyncGenerator, Dict, Any
+from ..core.providers import BaseProvider
 
-class InferenceProvider(ABC):
+class InferenceProvider(BaseProvider, ABC):
     """
     Abstract Base Class for LLM Inference Engines.
     Provides a unified interface so the core logic does not depend on a specific engine (Ollama, vLLM, etc).
@@ -15,10 +16,6 @@ class InferenceProvider(ABC):
 
     @abstractmethod
     async def generate(self, payload: dict) -> dict:
-        pass
-
-    @abstractmethod
-    async def health(self) -> bool:
         pass
 
     @abstractmethod
@@ -61,13 +58,24 @@ class OllamaProvider(InferenceProvider):
                 logging.error(f"Ollama generation failed: {e}")
         return {}
 
-    async def health(self) -> bool:
-        async with httpx.AsyncClient(timeout=5.0) as client:
-            try:
-                response = await client.get(f"{self.base_url}/api/tags")
-                return response.status_code == 200
-            except Exception:
-                return False
+    def initialize(self) -> None:
+        pass
+
+    def capabilities(self) -> Dict[str, Any]:
+        return {
+            "engine": "ollama",
+            "streaming": True,
+            "embeddings": True
+        }
+
+    def health(self) -> Dict[str, Any]:
+        try:
+            # Note: We keep this synchronous for simple health checks in the provider base.
+            response = httpx.get(f"{self.base_url}/api/tags", timeout=5.0)
+            return {"status": "ok" if response.status_code == 200 else "error"}
+        except Exception as e:
+            logging.error(f"Ollama health check failed: {e}")
+            return {"status": "unavailable"}
 
     def embeddings_supported(self) -> bool:
         return True

@@ -244,10 +244,22 @@ async def stream_chat(chat_request: ChatRequest, request: Request, db: Connectio
     sees a loading wheel, adhering to the 'Humanized Latency' design pattern.
     """
     from ..rag.guardrails import check_prompt
+    from ..language.dependencies import get_language_adapter
+    from ..core.context import RequestContext, UserContext, LanguageContext, AcademicContext
     
     # 1. Guardrails Layer: fast offline check
     cleaned_message = check_prompt(chat_request.message)
-    chat_request.message = cleaned_message
+    
+    # Construct Context (Mocking locale as en-US for now)
+    context = RequestContext(
+        user=UserContext(user_id=chat_request.user_id, role="student", persona="teacher"),
+        language=LanguageContext(source_locale="en-US", target_locale="en-US", script="latn", rtl=False),
+        academic=AcademicContext(subject=chat_request.subject_id, grade="Class 10")
+    )
+    
+    adapter = get_language_adapter()
+    english_query = adapter.inbound(cleaned_message, context)
+    chat_request.message = english_query
     
     return StreamingResponse(chat_stream_generator(chat_request, request), media_type="text/event-stream")
 
