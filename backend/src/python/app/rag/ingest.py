@@ -1,4 +1,17 @@
 import fitz  # PyMuPDF
+import os
+import sys
+
+if sys.platform == "win32":
+    main_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__))) # app/rag -> app
+    backend_dir = os.path.dirname(os.path.dirname(os.path.dirname(main_dir))) # backend
+    torch_lib = os.path.join(backend_dir, ".venv", "Lib", "site-packages", "torch", "lib")
+    if os.path.exists(torch_lib):
+        try:
+            os.add_dll_directory(torch_lib)
+        except Exception:
+            pass
+
 try:
     from sentence_transformers import SentenceTransformer
     embedding_model = SentenceTransformer("all-MiniLM-L6-v2")

@@ -2,8 +2,10 @@ import os
 import sys
 
 if sys.platform == "win32":
-    venv_base = os.path.dirname(os.path.dirname(sys.executable))
-    torch_lib = os.path.join(venv_base, "Lib", "site-packages", "torch", "lib")
+    # Resolve relative to main.py to support uvicorn workers and global python executors
+    main_dir = os.path.dirname(os.path.abspath(__file__))
+    backend_dir = os.path.dirname(os.path.dirname(os.path.dirname(main_dir)))
+    torch_lib = os.path.join(backend_dir, ".venv", "Lib", "site-packages", "torch", "lib")
     if os.path.exists(torch_lib):
         try:
             os.add_dll_directory(torch_lib)
