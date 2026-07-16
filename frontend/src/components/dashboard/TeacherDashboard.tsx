@@ -8,7 +8,7 @@ interface TeacherDashboardProps {
 }
 
 export default function TeacherDashboard({ user, subject }: TeacherDashboardProps) {
-  const [activeTab, setActiveTab] = useState<'library' | 'assessments' | 'assignments' | 'submissions' | 'profile'>('library');
+  const [activeTab, setActiveTab] = useState<'overview' | 'library' | 'assessments' | 'assignments' | 'submissions' | 'profile'>('library');
   const [documents, setDocuments] = useState<Document[]>([]);
   const [assessments, setAssessments] = useState<Assessment[]>([]);
   const [assignments, setAssignments] = useState<Assignment[]>([]);
