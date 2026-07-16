@@ -33,6 +33,7 @@ flowchart TD
     subgraph Inference & Hardware
         R -->|Prompt Context| Ollama[Ollama / Local LLMs]
         M -->|Extraction| Ollama
+        M -->|Retrieval| SQLite
         V -->|TTS Synthesizer| Piper[Piper/Parler TTS]
     end
 ```
@@ -64,7 +65,9 @@ flowchart TD
 
 #### `learning_engine/` (Educational Metrics)
 - **Role:** Deterministic academic tracking.
-- **Functionality:** Replaces LLM-based hallucinated grades with strict Python math. Calculates Concept Mastery using a weighted formula (Assessments: 0.6, Practice: 0.2, Chat: 0.2, Teacher override: 1.0). Controls the automated Revision Scheduler.
+- **Functionality:** 
+  - **Deterministic by Design**: Unlike the Memory Engine, the Learning Engine does not use LLM reasoning. All mastery updates, revision scheduling, priority calculation, and analytics are deterministic Python algorithms.
+  - Replaces LLM-based hallucinated grades with strict Python math. Calculates Concept Mastery using a weighted formula (Assessments: 0.6, Practice: 0.2, Chat: 0.2, Teacher override: 1.0). Controls the automated Revision Scheduler.
 
 #### `assessment/` & `assignment/` (Evaluation)
 - **Role:** Curriculum testing.
@@ -107,4 +110,4 @@ SmilAI configures itself automatically at startup to fit hardware limits:
 7. **Background Tasks:** 
    - `app.memory` analyzes the turn for new profile traits.
    - `app.learning_engine` updates mastery metrics if relevant.
-   - `app.api.voice` queues background TTS generation.
+   - `app.api.voice` queues Speech Preparation -> Sentence Split -> Cache Lookup -> TTS -> Cache Store -> Playback.
