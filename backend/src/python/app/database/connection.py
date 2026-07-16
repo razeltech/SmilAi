@@ -51,10 +51,35 @@ def init_db():
     try:
         conn.executescript(schema_script)
         
-        # Run database migrations for Milestone A columns
+        # Run database migrations for Platform v1.1 / Milestone A columns
         ensure_column(conn, "documents", "status", "TEXT CHECK(status IN ('pending', 'approved', 'archived')) NOT NULL DEFAULT 'approved'")
         ensure_column(conn, "assessments", "deleted_at", "TEXT")
         ensure_column(conn, "assignments", "deleted_at", "TEXT")
+        
+        # Platform v1.1 migrations
+        ensure_column(conn, "subjects", "category", "TEXT CHECK(category IN ('GENERAL', 'PROGRAMMING', 'SCIENCE', 'LANGUAGE', 'MEDICAL')) NOT NULL DEFAULT 'GENERAL'")
+        ensure_column(conn, "subjects", "supports_projects", "INTEGER NOT NULL DEFAULT 0")
+        ensure_column(conn, "subjects", "is_active", "INTEGER NOT NULL DEFAULT 1")
+        ensure_column(conn, "subjects", "updated_at", "TEXT")
+        ensure_column(conn, "subjects", "deleted_at", "TEXT")
+        
+        ensure_column(conn, "documents", "processed_at", "TEXT")
+        
+        ensure_column(conn, "assessments", "status", "TEXT CHECK(status IN ('draft', 'published', 'archived')) NOT NULL DEFAULT 'published'")
+        ensure_column(conn, "assessments", "published_at", "TEXT")
+        ensure_column(conn, "assessments", "updated_at", "TEXT")
+        
+        ensure_column(conn, "questions", "explanation", "TEXT")
+        ensure_column(conn, "questions", "difficulty", "TEXT CHECK(difficulty IN ('Easy', 'Medium', 'Hard')) NOT NULL DEFAULT 'Medium'")
+        ensure_column(conn, "questions", "updated_at", "TEXT")
+        
+        ensure_column(conn, "assignments", "status", "TEXT CHECK(status IN ('draft', 'published', 'archived')) NOT NULL DEFAULT 'published'")
+        ensure_column(conn, "assignments", "created_at", "TEXT NOT NULL DEFAULT ''")
+        ensure_column(conn, "assignments", "updated_at", "TEXT")
+        ensure_column(conn, "assignments", "published_at", "TEXT")
+        
+        # Backfill existing assignments created_at to preserve backward compatibility
+        conn.execute("UPDATE assignments SET created_at = due_date WHERE created_at = ''")
         
         # Seed default data if none exists
         org = conn.execute("SELECT id FROM organizations LIMIT 1").fetchone()

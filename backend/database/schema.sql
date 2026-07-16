@@ -29,6 +29,11 @@ CREATE TABLE IF NOT EXISTS subjects (
     grade_band_id TEXT NOT NULL,
     name TEXT NOT NULL,
     teacher_id TEXT NOT NULL,
+    category TEXT CHECK(category IN ('GENERAL', 'PROGRAMMING', 'SCIENCE', 'LANGUAGE', 'MEDICAL')) NOT NULL DEFAULT 'GENERAL',
+    supports_projects INTEGER NOT NULL DEFAULT 0,
+    is_active INTEGER NOT NULL DEFAULT 1,
+    updated_at TEXT,
+    deleted_at TEXT,
     FOREIGN KEY(org_id) REFERENCES organizations(id),
     FOREIGN KEY(grade_band_id) REFERENCES grade_bands(id),
     FOREIGN KEY(teacher_id) REFERENCES users(id)
@@ -51,6 +56,7 @@ CREATE TABLE IF NOT EXISTS documents (
     type TEXT CHECK(type IN ('library', 'personal')) NOT NULL,
     chunk_count INTEGER NOT NULL DEFAULT 0,
     uploaded_at TEXT NOT NULL,
+    processed_at TEXT,
     status TEXT CHECK(status IN ('pending', 'approved', 'archived')) NOT NULL DEFAULT 'approved',
     FOREIGN KEY(subject_id) REFERENCES subjects(id),
     FOREIGN KEY(org_id) REFERENCES organizations(id)
@@ -96,6 +102,9 @@ CREATE TABLE IF NOT EXISTS assessments (
     question_count INTEGER NOT NULL,
     topic TEXT NOT NULL,
     difficulty TEXT NOT NULL,
+    status TEXT CHECK(status IN ('draft', 'published', 'archived')) NOT NULL DEFAULT 'published',
+    published_at TEXT,
+    updated_at TEXT,
     created_at TEXT NOT NULL,
     deleted_at TEXT,
     FOREIGN KEY(subject_id) REFERENCES subjects(id)
@@ -108,7 +117,10 @@ CREATE TABLE IF NOT EXISTS questions (
     prompt TEXT NOT NULL,
     choices TEXT,
     correct_answer TEXT,
+    explanation TEXT,
+    difficulty TEXT CHECK(difficulty IN ('Easy', 'Medium', 'Hard')) NOT NULL DEFAULT 'Medium',
     source_citations TEXT,
+    updated_at TEXT,
     FOREIGN KEY(assessment_id) REFERENCES assessments(id)
 );
 
@@ -132,6 +144,10 @@ CREATE TABLE IF NOT EXISTS assignments (
     description TEXT NOT NULL,
     rubric TEXT NOT NULL,
     due_date TEXT NOT NULL,
+    status TEXT CHECK(status IN ('draft', 'published', 'archived')) NOT NULL DEFAULT 'published',
+    created_at TEXT NOT NULL,
+    updated_at TEXT,
+    published_at TEXT,
     deleted_at TEXT,
     FOREIGN KEY(subject_id) REFERENCES subjects(id)
 );
@@ -163,3 +179,23 @@ CREATE TABLE IF NOT EXISTS student_memory (
     FOREIGN KEY(student_id) REFERENCES users(id),
     FOREIGN KEY(subject_id) REFERENCES subjects(id)
 );
+
+CREATE TABLE IF NOT EXISTS audit_logs (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    action TEXT NOT NULL,
+    resource TEXT NOT NULL,
+    resource_id TEXT,
+    timestamp TEXT NOT NULL,
+    metadata TEXT,
+    ip_address TEXT,
+    user_agent TEXT,
+    FOREIGN KEY(user_id) REFERENCES users(id)
+);
+
+-- Performance Indexes
+CREATE INDEX IF NOT EXISTS idx_documents_subject ON documents(subject_id);
+CREATE INDEX IF NOT EXISTS idx_chunks_doc ON chunks(doc_id);
+CREATE INDEX IF NOT EXISTS idx_chat_session ON chat_messages(session_id);
+CREATE INDEX IF NOT EXISTS idx_memory_student ON student_memory(student_id, subject_id);
+CREATE INDEX IF NOT EXISTS idx_assessment_subject ON assessments(subject_id);
