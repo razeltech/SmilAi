@@ -127,6 +127,9 @@ export default function TeacherDashboard({ user, subject }: TeacherDashboardProp
   const [selectedAssessment, setSelectedAssessment] = useState<any | null>(null);
   const [assessmentQuestions, setAssessmentQuestions] = useState<any[]>([]);
   const [loadingQuestions, setLoadingQuestions] = useState(false);
+  const [editQuestionId, setEditQuestionId] = useState<string | null>(null);
+  const [editQuestionData, setEditQuestionData] = useState<any>({});
+  
   const [deleteConfirm, setDeleteConfirm] = useState<{
     type: 'document' | 'assessment' | 'assignment';
     id: string;
@@ -207,6 +210,40 @@ export default function TeacherDashboard({ user, subject }: TeacherDashboardProp
       if (!res.ok) throw new Error('Failed to approve document');
       setSuccess('Document approved for RAG indexing.');
       fetchData();
+    } catch (err: any) {
+      setError(err.message);
+    }
+  };
+
+  const handleToggleAssessmentStatus = async (as: Assessment) => {
+    const newStatus = as.status === 'draft' ? 'published' : 'draft';
+    try {
+      const res = await fetch(`/v1/assessments/${as.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: newStatus })
+      });
+      if (res.ok) {
+        setSuccess(`Assessment "${as.name}" is now ${newStatus}.`);
+        fetchData();
+      }
+    } catch (err: any) {
+      setError(err.message);
+    }
+  };
+
+  const handleSaveQuestion = async (qId: string) => {
+    try {
+      const res = await fetch(`/v1/questions/${qId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(editQuestionData)
+      });
+      if (res.ok) {
+        setSuccess('Question updated successfully.');
+        setEditQuestionId(null);
+        if (selectedAssessment) handleViewAssessment(selectedAssessment);
+      }
     } catch (err: any) {
       setError(err.message);
     }
@@ -487,15 +524,17 @@ export default function TeacherDashboard({ user, subject }: TeacherDashboardProp
           >
             <span className="flex items-center gap-2"><GraduationCap className="h-4 w-4" /> AI Assessments</span>
           </button>
-          <button
-            onClick={() => setActiveTab('assignments')}
-            className={`pb-3 px-4 text-sm font-semibold border-b-2 transition-all cursor-pointer ${
-              activeTab === 'assignments' ? 'border-teal-600 text-teal-600' : 'border-transparent text-slate-500 hover:text-slate-800'
-            }`}
-            id="teacher-tab-assignments"
-          >
-            <span className="flex items-center gap-2"><Code className="h-4 w-4" /> Programming Projects</span>
-          </button>
+          {subject.supports_projects === 1 && (
+            <button
+              onClick={() => setActiveTab('assignments')}
+              className={`pb-3 px-4 text-sm font-semibold border-b-2 transition-all cursor-pointer ${
+                activeTab === 'assignments' ? 'border-teal-600 text-teal-600' : 'border-transparent text-slate-500 hover:text-slate-800'
+              }`}
+              id="teacher-tab-assignments"
+            >
+              <span className="flex items-center gap-2"><Code className="h-4 w-4" /> Programming Projects</span>
+            </button>
+          )}
           <button
             onClick={() => setActiveTab('submissions')}
             className={`pb-3 px-4 text-sm font-semibold border-b-2 transition-all cursor-pointer ${
@@ -752,6 +791,16 @@ export default function TeacherDashboard({ user, subject }: TeacherDashboardProp
                         <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-50 text-amber-700 border border-amber-100">
                           {as.questionCount} Questions
                         </span>
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold border ${as.status === 'draft' ? 'bg-slate-50 text-slate-700 border-slate-200' : 'bg-emerald-50 text-emerald-700 border-emerald-200'}`}>
+                          {as.status || 'published'}
+                        </span>
+                        <button
+                          onClick={() => handleToggleAssessmentStatus(as)}
+                          className="p-1.5 hover:bg-slate-100/50 rounded-lg text-slate-500 hover:text-slate-600 cursor-pointer transition-all ml-1"
+                          title="Toggle Draft/Published Status"
+                        >
+                          <RefreshCw className="h-4 w-4" />
+                        </button>
                         <button
                           onClick={() => handleViewAssessment(as)}
                           className="p-1.5 hover:bg-indigo-100/50 rounded-lg text-slate-500 hover:text-indigo-600 cursor-pointer transition-all ml-1"
@@ -1304,10 +1353,33 @@ export default function TeacherDashboard({ user, subject }: TeacherDashboardProp
               ) : (
                 <div className="space-y-6">
                   {assessmentQuestions.map((q, qidx) => (
-                    <div key={q.id} className="p-4 rounded-xl border border-slate-150 bg-slate-50/50 space-y-3">
-                      <div className="flex items-start gap-2">
+                    <div key={q.id} className="p-4 rounded-xl border border-slate-150 bg-slate-50/50 space-y-3 relative group">
+                      <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity flex gap-2">
+                        {editQuestionId === q.id ? (
+                          <>
+                            <button onClick={() => setEditQuestionId(null)} className="p-1 text-slate-400 hover:text-slate-600"><X className="h-4 w-4" /></button>
+                            <button onClick={() => handleSaveQuestion(q.id)} className="p-1 text-emerald-500 hover:text-emerald-700"><CheckCircle className="h-4 w-4" /></button>
+                          </>
+                        ) : (
+                          <button onClick={() => {
+                            setEditQuestionId(q.id);
+                            setEditQuestionData({ prompt: q.prompt, correct_answer: q.correct_answer || q.correctAnswer });
+                          }} className="p-1 text-slate-400 hover:text-indigo-600"><Edit className="h-4 w-4" /></button>
+                        )}
+                      </div>
+
+                      <div className="flex items-start gap-2 pr-10">
                         <span className="text-xs bg-indigo-50 border border-indigo-150 text-indigo-700 font-extrabold px-2 py-0.5 rounded-md shrink-0">Q{qidx + 1}</span>
-                        <div className="text-sm font-semibold text-slate-800 leading-snug">{q.prompt}</div>
+                        {editQuestionId === q.id ? (
+                          <textarea
+                            value={editQuestionData.prompt || ''}
+                            onChange={(e) => setEditQuestionData({ ...editQuestionData, prompt: e.target.value })}
+                            className="text-sm font-semibold text-slate-800 leading-snug w-full border border-slate-300 rounded p-1"
+                            rows={2}
+                          />
+                        ) : (
+                          <div className="text-sm font-semibold text-slate-800 leading-snug">{q.prompt}</div>
+                        )}
                       </div>
                       
                       {q.type === 'mcq' && q.choices && q.choices.length > 0 && (
@@ -1331,7 +1403,16 @@ export default function TeacherDashboard({ user, subject }: TeacherDashboardProp
                       {q.type === 'short_answer' && (
                         <div className="pl-8 text-xs text-slate-600 bg-white p-3 rounded-lg border border-slate-100">
                           <div className="font-semibold text-slate-400 mb-1">Model Correct Answer Description:</div>
-                          <p className="italic text-slate-700">{q.correct_answer || q.correctAnswer}</p>
+                          {editQuestionId === q.id ? (
+                            <textarea
+                              value={editQuestionData.correct_answer || ''}
+                              onChange={(e) => setEditQuestionData({ ...editQuestionData, correct_answer: e.target.value })}
+                              className="italic text-slate-700 w-full border border-slate-300 rounded p-1"
+                              rows={2}
+                            />
+                          ) : (
+                            <p className="italic text-slate-700">{q.correct_answer || q.correctAnswer}</p>
+                          )}
                         </div>
                       )}
 

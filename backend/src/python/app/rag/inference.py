@@ -8,9 +8,10 @@ import logging
 from .prompts import SMILEY_SYSTEM_PROMPT, SEARCH_REWRITER_PROMPT
 from .prompt_builder import PROMPT_BUILDER
 
+from ..core.config import active_profile
+
 OLLAMA_URL = os.environ.get("OLLAMA_URL", "http://localhost:11434/api/chat")
-# Defaulting to qwen2.5:7b as recommended and agreed upon in the architecture phase
-LLM_MODEL = os.environ.get("OLLAMA_MODEL", "qwen2.5:7b-instruct")
+LLM_MODEL = os.environ.get("OLLAMA_MODEL", active_profile.llm_model)
 
 async def generate_rag_response_stream(
     query: str, 

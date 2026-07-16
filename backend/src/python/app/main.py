@@ -16,15 +16,15 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 
-from .database.connection import init_db
-from .api import auth, chat, content, assessments, voice, admin
+from .core.startup import boot_system
+from .api import auth, chat, content, assessments, voice, admin, system, learning
 from .rag import coding_brain
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup logic
     print("Booting up SmilAi FastAPI Brain...")
-    init_db()  # Safely initialize SQLite unified schema
+    boot_system()
     yield
     # Shutdown logic
     print("Shutting down SmilAi...")
@@ -53,6 +53,8 @@ app.include_router(assessments.router, prefix="/v1")
 app.include_router(coding_brain.router, prefix="/v1")
 app.include_router(voice.router, prefix="/v1")
 app.include_router(admin.router, prefix="/v1")
+app.include_router(system.router, prefix="/v1")
+app.include_router(learning.router, prefix="/v1")
 
 @app.get("/health")
 def health_check():

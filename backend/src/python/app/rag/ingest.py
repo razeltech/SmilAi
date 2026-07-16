@@ -25,6 +25,9 @@ except Exception as e:
             return MockArray()
     embedding_model = DummyEmbeddingModel()
 
+def get_embedder():
+    return embedding_model
+
 import uuid
 import os
 from ..database.vector_db import VectorDB

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { BookOpen, Code, FileText, Send, Mic, MicOff, Volume2, VolumeX, CheckCircle, HelpCircle, Award, BarChart2, ShieldAlert, Cpu, Settings, Info, Layers } from 'lucide-react';
+import { BookOpen, Code, FileText, Send, Mic, MicOff, Volume2, VolumeX, CheckCircle, HelpCircle, Award, BarChart2, ShieldAlert, Cpu, Settings, Info, Layers, Trash2, X } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import { Subject, User, ChatSession, ChatMessage, Assessment, Assignment, StudentRecord } from '../../types';
 
@@ -15,6 +15,10 @@ export default function StudentDashboard({ user, subject }: StudentDashboardProp
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+
+  // Learning Engine State
+  const [masteryData, setMasteryData] = useState<any[]>([]);
+  const [revisionPlan, setRevisionPlan] = useState<any[]>([]);
 
   // Student Profile fields
   const [profileName, setProfileName] = useState('');
@@ -116,13 +120,15 @@ export default function StudentDashboard({ user, subject }: StudentDashboardProp
       const assignRes = await fetch(`/v1/subjects/${subject.id}/assignments`);
       const assignData = await assignRes.json();
       const safeAssignments = Array.isArray(assignData) ? assignData : [];
-      setAssignments(safeAssignments);
-      if (safeAssignments.length > 0) setSelectedAssignmentId(safeAssignments[0].id);
+      const publishedAssignments = safeAssignments.filter(a => a.status === 'published' || !a.status);
+      setAssignments(publishedAssignments);
+      if (publishedAssignments.length > 0) setSelectedAssignmentId(publishedAssignments[0].id);
 
       // Assessments
       const assessRes = await fetch(`/v1/subjects/${subject.id}/assessments`);
       const assessData = await assessRes.json();
-      setAssessments(Array.isArray(assessData) ? assessData : []);
+      const safeAssessments = Array.isArray(assessData) ? assessData : [];
+      setAssessments(safeAssessments.filter(a => a.status === 'published' || !a.status));
 
       // Fetch Subject Documents/Syllabus references
       const docRes = await fetch(`/v1/subjects/${subject.id}/documents`);
@@ -150,6 +156,21 @@ export default function StudentDashboard({ user, subject }: StudentDashboardProp
     }
   };
 
+  const handleDeleteSession = async (sid: string) => {
+    try {
+      const res = await fetch(`/v1/chat/sessions/${sid}`, { method: 'DELETE' });
+      if (res.ok) {
+        setSessions(prev => prev.filter(s => s.id !== sid));
+        if (currentSessionId === sid) {
+          setCurrentSessionId('');
+          setMessages([getInitialGreetingMessage('')]);
+        }
+      }
+    } catch (err) {
+      console.error('Failed to delete session', err);
+    }
+  };
+
   const fetchStudentRecords = async () => {
     try {
       const recRes = await fetch(`/v1/students/${user.id}/subjects/${subject.id}/record`);
@@ -164,16 +185,24 @@ export default function StudentDashboard({ user, subject }: StudentDashboardProp
 
   const fetchStudentProfile = async () => {
     try {
-      const res = await fetch(`/v1/users/${user.id}/profile`);
-      if (res.ok) {
-        const data = await res.json();
-        setProfileName(data.name || user.name);
-        setProfileEmail(data.email || user.email);
-        setProfileRollNo(data.rollNo || `AP-2026-${1000 + parseInt(user.id.replace(/\D/g, '') || '7')}`);
-        setProfileGrade(data.grade || 'Grade 10');
-        setProfileBoard(data.board || 'AP State Board (SSC)');
-        setProfileBio(data.bio || 'Keen student exploring mathematics, science, and computer science courses via personalized SmilAI mentoring.');
-        setProfilePhone(data.phone || '+91 91234 56789');
+      setProfileName(user.name);
+      setProfileEmail(user.email);
+      setProfileRollNo(`AP-2026-${1000 + parseInt(user.id.replace(/\D/g, '') || '7')}`);
+      setProfileGrade('Grade 10');
+      setProfileBoard('AP State Board (SSC)');
+      setProfileBio('Keen student exploring mathematics, science, and computer science courses via personalized SmilAI mentoring.');
+      setProfilePhone('+91 91234 56789');
+
+      if (subject?.id) {
+        try {
+          const masteryRes = await fetch(`/v1/learning/mastery/${user.id}?subjectId=${subject.id}`);
+          if (masteryRes.ok) setMasteryData(await masteryRes.json());
+          
+          const planRes = await fetch(`/v1/learning/revision-plan/${user.id}?subjectId=${subject.id}`);
+          if (planRes.ok) setRevisionPlan(await planRes.json());
+        } catch (e) {
+          console.error("Failed to fetch learning engine data", e);
+        }
       }
     } catch (err) {
       console.error('Failed to fetch student profile:', err);
@@ -664,18 +693,26 @@ export default function StudentDashboard({ user, subject }: StudentDashboardProp
                     <div className="text-xs text-slate-400 text-center py-6">No previous chats. Start by asking below!</div>
                   ) : (
                     sessions.map(s => (
-                      <button
-                        key={s.id}
-                        onClick={() => {
-                          setCurrentSessionId(s.id);
-                          fetchSessionMessages(s.id);
-                        }}
-                        className={`w-full text-left p-2.5 rounded-lg text-xs font-medium transition-colors block truncate cursor-pointer ${
-                          currentSessionId === s.id ? 'bg-teal-50 text-teal-800 font-semibold' : 'text-slate-600 hover:bg-slate-50'
-                        }`}
-                      >
-                        {s.title}
-                      </button>
+                      <div key={s.id} className={`w-full text-left p-1.5 rounded-lg text-xs font-medium transition-colors flex items-center justify-between ${
+                        currentSessionId === s.id ? 'bg-teal-50 text-teal-800 font-semibold' : 'text-slate-600 hover:bg-slate-50'
+                      }`}>
+                        <button
+                          onClick={() => {
+                            setCurrentSessionId(s.id);
+                            fetchSessionMessages(s.id);
+                          }}
+                          className="truncate cursor-pointer flex-1 text-left px-1 py-1"
+                        >
+                          {s.title}
+                        </button>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); handleDeleteSession(s.id); }}
+                          className="p-1 text-slate-400 hover:text-red-500 rounded hover:bg-red-50"
+                          title="Delete Session"
+                        >
+                          <Trash2 className="h-3 w-3" />
+                        </button>
+                      </div>
                     ))
                   )}
                 </div>
@@ -1400,6 +1437,65 @@ export default function StudentDashboard({ user, subject }: StudentDashboardProp
                       <HelpCircle className="h-3.5 w-3.5 text-slate-300" />
                       Academic details matching current board registration files.
                     </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Adaptive Learning: Mastery & Study Plan */}
+              <div className="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-sm">
+                <h3 className="text-sm font-bold text-slate-900 mb-6 pb-3 border-b border-slate-100 flex items-center gap-2">
+                  <Brain className="h-4 w-4 text-teal-500" />
+                  <span>My Learning Analytics</span>
+                </h3>
+
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  {/* Concept Mastery List */}
+                  <div>
+                    <h4 className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-4">Concept Mastery</h4>
+                    {masteryData.length === 0 ? (
+                      <p className="text-xs text-slate-400 italic">No concepts mastered yet. Keep interacting!</p>
+                    ) : (
+                      <div className="space-y-3">
+                        {masteryData.map((item, idx) => (
+                          <div key={idx} className="flex items-center justify-between p-2.5 bg-slate-50 border border-slate-100 rounded-lg">
+                            <span className="text-xs font-semibold text-slate-700 capitalize">{item.concept}</span>
+                            <span className={`text-[10px] font-bold px-2 py-1 rounded-full flex items-center gap-1 ${
+                              item.mastery_score >= 0.8 ? 'bg-emerald-100 text-emerald-700' :
+                              item.mastery_score >= 0.4 ? 'bg-amber-100 text-amber-700' :
+                              'bg-rose-100 text-rose-700'
+                            }`}>
+                              {item.mastery_score >= 0.8 ? '🟢 Strong' : item.mastery_score >= 0.4 ? '🟠 Needs Practice' : '🔴 Review Soon'}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Revision Plan */}
+                  <div>
+                    <h4 className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-4">Recommended Study Plan</h4>
+                    {revisionPlan.length === 0 ? (
+                      <p className="text-xs text-slate-400 italic">You're all caught up!</p>
+                    ) : (
+                      <div className="space-y-3">
+                        {revisionPlan.map((plan, idx) => (
+                          <div key={idx} className="flex flex-col p-3 bg-indigo-50/50 border border-indigo-100 rounded-lg relative overflow-hidden">
+                            <div className="absolute top-0 left-0 w-1 h-full bg-indigo-400"></div>
+                            <span className="text-xs font-bold text-indigo-900 capitalize">{plan.concept}</span>
+                            <div className="flex justify-between items-center mt-2">
+                              <span className="text-[10px] text-indigo-600 font-medium flex items-center gap-1">
+                                <Clock className="h-3 w-3" />
+                                {new Date(plan.scheduled_date).toLocaleDateString()}
+                              </span>
+                              <span className="text-[9px] font-bold uppercase tracking-wider bg-white px-2 py-0.5 rounded text-indigo-500 border border-indigo-100">
+                                Priority: {plan.priority_score}
+                              </span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>

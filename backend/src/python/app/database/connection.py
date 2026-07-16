@@ -3,8 +3,8 @@ import os
 from contextlib import contextmanager
 
 # Default to local db if env var is missing
-DB_PATH = os.environ.get("SQLITE_DB_PATH", "./database/smilai.db")
-SCHEMA_PATH = "./database/schema.sql"
+DB_PATH = os.environ.get("SQLITE_DB_PATH", os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))), "database", "smilai.db"))
+SCHEMA_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))), "database", "schema.sql")
 
 def dict_factory(cursor, row):
     """Returns DB rows as dictionaries instead of tuples for clean JSON serialization."""

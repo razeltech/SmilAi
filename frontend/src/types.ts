@@ -63,6 +63,9 @@ export interface Subject {
   teacherId: string;
   teacherName?: string;
   gradeBandName?: string;
+  category?: 'GENERAL' | 'PROGRAMMING' | 'SCIENCE' | 'LANGUAGE' | 'MEDICAL';
+  supports_projects?: number;
+  is_active?: number;
 }
 
 export interface Document {
@@ -115,6 +118,8 @@ export interface Assessment {
   difficulty: 'easy' | 'medium' | 'hard';
   createdAt: string;
   subjectName?: string;
+  status?: 'draft' | 'published' | 'archived';
+  publishedAt?: string;
 }
 
 export interface Question {
@@ -145,6 +150,8 @@ export interface Assignment {
   description: string;
   rubric: string; // Rubric description/criteria
   dueDate: string;
+  status?: 'draft' | 'published' | 'archived';
+  publishedAt?: string;
 }
 
 export interface Submission {

@@ -1,5 +1,5 @@
 import asyncio
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, Request, HTTPException
 from fastapi.responses import StreamingResponse
 import random
 import uuid
@@ -243,6 +243,12 @@ async def stream_chat(chat_request: ChatRequest, request: Request, db: Connectio
     Primary RAG endpoint. Uses StreamingResponse to ensure the student never 
     sees a loading wheel, adhering to the 'Humanized Latency' design pattern.
     """
+    from ..rag.guardrails import check_prompt
+    
+    # 1. Guardrails Layer: fast offline check
+    cleaned_message = check_prompt(chat_request.message)
+    chat_request.message = cleaned_message
+    
     return StreamingResponse(chat_stream_generator(chat_request, request), media_type="text/event-stream")
 
 @router.get("/sessions")
@@ -282,3 +288,20 @@ def get_session_messages(sessionId: str, db: Connection = Depends(get_db)):
         }
         for r in rows
     ]
+
+@router.delete("/sessions/{sessionId}")
+def delete_session(sessionId: str, db: Connection = Depends(get_db)):
+    """Deletes a chat session and all its messages."""
+    try:
+        db.execute("DELETE FROM chat_messages WHERE session_id = ?", (sessionId,))
+        cursor = db.execute("DELETE FROM chat_sessions WHERE id = ?", (sessionId,))
+        if cursor.rowcount == 0:
+            db.rollback()
+            raise HTTPException(status_code=404, detail="Session not found")
+        db.commit()
+        return {"message": "Success"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))

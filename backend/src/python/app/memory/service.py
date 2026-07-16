@@ -11,6 +11,7 @@ from datetime import datetime
 from ..database.connection import get_db_connection
 from ..database.vector_db import VectorDB
 from ..rag.ingest import embedding_model
+from ..learning_engine.engine import LearningEngine
 
 logger = logging.getLogger(__name__)
 
@@ -174,6 +175,16 @@ Extracted Memory candidates (JSON format):"""
                                 }]
                             )
                             logger.info(f"Student Memory Upsert Completed: {m_type} | {concept} (conf={final_conf:.2f})")
+                            
+                            # If it's an academic concept, also route to the Learning Engine to update Concept Mastery
+                            if m_type == 'ACADEMIC':
+                                LearningEngine.record_event(
+                                    student_id=student_id,
+                                    subject_id=subject_id,
+                                    event_type="chat_interaction",
+                                    payload={"concept": concept, "score": float(final_conf)}
+                                )
+                                
                         except Exception as ve:
                             logger.error(f"ChromaDB student_memory collection upsert error: {ve}")
                 except Exception as pe:

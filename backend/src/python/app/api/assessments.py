@@ -1,6 +1,8 @@
 from fastapi import APIRouter, HTTPException, Depends
 import httpx
 import json
+from pydantic import BaseModel
+from sqlite3 import Connection
 
 from .schemas import ChatRequest
 from ..database.connection import get_db
@@ -59,3 +61,38 @@ async def generate_assessment(topic: str, org_id: str, subject_id: str):
             return {"topic": topic, "quiz": quiz_json}
         except Exception as e:
             raise HTTPException(status_code=500, detail=str(e))
+
+class AssessmentSubmitRequest(BaseModel):
+    studentId: str
+    answers: list[dict] # {"questionId": "q1", "answerContent": "A", "concept": "Quadratic"} - the frontend will need to pass concept or we infer it
+
+@router.post("/{assessment_id}/submit")
+def submit_assessment(assessment_id: str, payload: AssessmentSubmitRequest, db: Connection = Depends(get_db)):
+    """
+    Grades an assessment and routes the results to the Learning Engine.
+    """
+    # In a real app we'd grade the answers against the DB questions.
+    # For now, we simulate grading and route events.
+    from ..learning_engine.engine import LearningEngine
+    
+    results = []
+    for ans in payload.answers:
+        # Dummy grading for demonstration (assume 100% correct)
+        score = 1.0
+        concept = ans.get("concept", "general_topic")
+        
+        # Route to Learning Engine
+        LearningEngine.record_event(
+            student_id=payload.studentId,
+            subject_id="unknown_subject", # We need subjectId from DB or payload
+            event_type="assessment_completed",
+            payload={"concept": concept, "score": score}
+        )
+        
+        results.append({
+            "questionId": ans.get("questionId"),
+            "score": score,
+            "feedback": "Correct!"
+        })
+        
+    return {"status": "success", "results": results}

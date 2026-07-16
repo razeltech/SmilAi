@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from sqlite3 import Connection
 from pydantic import BaseModel
 from typing import Optional
@@ -8,10 +8,30 @@ from datetime import datetime
 from ..database.connection import get_db
 from ..documents.service import DocumentRepository, DocumentService
 from ..assessment.service import AssessmentRepository, AssessmentService
+from ..subject.service import create_subject, update_subject, delete_subject, enroll_student, unenroll_student
+from ..assignment.service import update_assignment
 
 router = APIRouter(tags=["Admin & Data Routes"])
 
 # Pydantic Request Schemas
+class SubjectPostRequest(BaseModel):
+    orgId: str
+    name: str
+    teacherId: str
+    gradeBandId: str
+    category: str = "GENERAL"
+    supportsProjects: int = 0
+    isActive: int = 1
+
+class SubjectPatchRequest(BaseModel):
+    name: Optional[str] = None
+    category: Optional[str] = None
+    supportsProjects: Optional[int] = None
+    isActive: Optional[int] = None
+
+class SubjectEnrollRequest(BaseModel):
+    userId: str
+
 class BulkDocItem(BaseModel):
     name: str
     content: str
@@ -29,12 +49,29 @@ class AssessmentPostRequest(BaseModel):
     difficulty: str
     questionCount: int
 
+class AssessmentPatchRequest(BaseModel):
+    status: Optional[str] = None
+
+class QuestionPatchRequest(BaseModel):
+    prompt: Optional[str] = None
+    choices: Optional[str] = None
+    correct_answer: Optional[str] = None
+    explanation: Optional[str] = None
+    difficulty: Optional[str] = None
+
 class AssignmentPostRequest(BaseModel):
     subjectId: str
     title: str
     description: str
     rubric: str
     dueDate: str
+
+class AssignmentPatchRequest(BaseModel):
+    title: Optional[str] = None
+    description: Optional[str] = None
+    rubric: Optional[str] = None
+    dueDate: Optional[str] = None
+    status: Optional[str] = None
 
 class OverrideGradeRequest(BaseModel):
     score: int
@@ -59,7 +96,7 @@ def get_subjects(userId: str = None, role: str = None, db: Connection = Depends(
     """Returns subjects based on user role - enrolled subjects for students, owned for teachers, all for admin."""
     if role == "admin" or not userId:
         subjects = db.execute("""
-            SELECT s.id, s.org_id, s.grade_band_id, s.name, s.teacher_id,
+            SELECT s.id, s.org_id, s.grade_band_id, s.name, s.teacher_id, s.category, s.supports_projects, s.is_active,
                    gb.name AS grade_band_name, u.name AS teacher_name
             FROM subjects s
             LEFT JOIN grade_bands gb ON s.grade_band_id = gb.id
@@ -67,7 +104,7 @@ def get_subjects(userId: str = None, role: str = None, db: Connection = Depends(
         """).fetchall()
     elif role == "teacher":
         subjects = db.execute("""
-            SELECT s.id, s.org_id, s.grade_band_id, s.name, s.teacher_id,
+            SELECT s.id, s.org_id, s.grade_band_id, s.name, s.teacher_id, s.category, s.supports_projects, s.is_active,
                    gb.name AS grade_band_name, u.name AS teacher_name
             FROM subjects s
             LEFT JOIN grade_bands gb ON s.grade_band_id = gb.id
@@ -77,7 +114,7 @@ def get_subjects(userId: str = None, role: str = None, db: Connection = Depends(
     else:
         # Student — return enrolled subjects
         subjects = db.execute("""
-            SELECT s.id, s.org_id, s.grade_band_id, s.name, s.teacher_id,
+            SELECT s.id, s.org_id, s.grade_band_id, s.name, s.teacher_id, s.category, s.supports_projects, s.is_active,
                    gb.name AS grade_band_name, u.name AS teacher_name
             FROM subjects s
             JOIN enrollments e ON e.subject_id = s.id
@@ -93,11 +130,52 @@ def get_subjects(userId: str = None, role: str = None, db: Connection = Depends(
             "gradeBandId": s["grade_band_id"],
             "name": s["name"],
             "teacherId": s["teacher_id"],
+            "category": s.get("category", "GENERAL"),
+            "supportsProjects": s.get("supports_projects", 0),
+            "isActive": s.get("is_active", 1),
             "gradeBandName": s.get("grade_band_name", ""),
             "teacherName": s.get("teacher_name", "")
         }
         for s in subjects
     ]
+
+@router.post("/subjects")
+def add_subject(req: SubjectPostRequest, db: Connection = Depends(get_db)):
+    """Creates a new subject."""
+    subject_id = create_subject(
+        db, req.orgId, req.gradeBandId, req.name, req.teacherId,
+        req.category, req.supportsProjects, req.isActive
+    )
+    db.commit()
+    return {"id": subject_id, "message": "Success"}
+
+@router.patch("/subjects/{id}")
+def edit_subject(id: str, req: SubjectPatchRequest, db: Connection = Depends(get_db)):
+    """Updates an existing subject."""
+    update_subject(db, id, req.name, req.category, req.supportsProjects, req.isActive)
+    db.commit()
+    return {"message": "Success"}
+
+@router.delete("/subjects/{id}")
+def remove_subject(id: str, db: Connection = Depends(get_db)):
+    """Soft deletes a subject."""
+    delete_subject(db, id)
+    db.commit()
+    return {"message": "Success"}
+
+@router.post("/subjects/{subjectId}/enroll")
+def enroll_user(subjectId: str, req: SubjectEnrollRequest, db: Connection = Depends(get_db)):
+    """Enrolls a student in a subject."""
+    enroll_student(db, subjectId, req.userId)
+    db.commit()
+    return {"message": "Success"}
+
+@router.delete("/subjects/{subjectId}/enroll/{userId}")
+def unenroll_user(subjectId: str, userId: str, db: Connection = Depends(get_db)):
+    """Unenrolls a student from a subject."""
+    unenroll_student(db, subjectId, userId)
+    db.commit()
+    return {"message": "Success"}
 
 # CRUD - Documents
 @router.get("/subjects/{subjectId}/documents")
@@ -118,37 +196,27 @@ def get_subject_documents(subjectId: str, db: Connection = Depends(get_db)):
         for r in rows
     ]
 
-@router.post("/subjects/{subjectId}/documents/bulk")
-def upload_subject_documents_bulk(subjectId: str, req: BulkDocRequest, db: Connection = Depends(get_db)):
-    """Transactionally ingests multiple documents for a subject."""
+@router.post("/subjects/{subjectId}/documents/upload")
+async def upload_subject_document(subjectId: str, file: UploadFile = File(...), db: Connection = Depends(get_db)):
+    """Transactionally ingests an uploaded document (PDF/DOCX/TXT) for a subject."""
     subject = db.execute("SELECT org_id FROM subjects WHERE id = ?", (subjectId,)).fetchone()
     if not subject:
         raise HTTPException(status_code=404, detail="Subject not found")
     org_id = subject["org_id"]
     
-    docs_processed = []
-    total_chunks = 0
-    for doc in req.documents:
-        try:
-            res = DocumentService.ingest_parsed_document(
-                filename=doc.name,
-                content=doc.content,
-                org_id=org_id,
-                subject_id=subjectId
-            )
-            total_chunks += res["total_chunks"]
-            docs_processed.append({
-                "id": res["doc_id"],
-                "name": doc.name,
-                "status": "pending"
-            })
-        except Exception as e:
-            raise HTTPException(status_code=500, detail=f"Failed to ingest doc '{doc.name}': {str(e)}")
+    from ..documents.ingestion import process_document_upload
+    res = await process_document_upload(file, org_id, subjectId)
             
     return {
-        "processedCount": len(docs_processed),
-        "totalChunks": total_chunks,
-        "documents": docs_processed
+        "processedCount": 1,
+        "totalChunks": res["total_chunks"],
+        "documents": [
+            {
+                "id": res["doc_id"],
+                "name": file.filename,
+                "status": "pending"
+            }
+        ]
     }
 
 @router.patch("/documents/{id}")
@@ -231,6 +299,63 @@ def get_assessment_details(id: str, db: Connection = Depends(get_db)):
         "questions": questions
     }
 
+@router.patch("/assessments/{id}")
+def edit_assessment(id: str, req: AssessmentPatchRequest, db: Connection = Depends(get_db)):
+    """Updates assessment status."""
+    updates = []
+    params = []
+    if req.status is not None:
+        updates.append("status = ?")
+        params.append(req.status)
+        if req.status == "published":
+            updates.append("published_at = ?")
+            params.append(datetime.utcnow().isoformat())
+            
+    if not updates:
+        return {"message": "Success"}
+        
+    updates.append("updated_at = ?")
+    params.append(datetime.utcnow().isoformat())
+    params.append(id)
+    
+    query = f"UPDATE assessments SET {', '.join(updates)} WHERE id = ? AND deleted_at IS NULL"
+    db.execute(query, tuple(params))
+    db.commit()
+    return {"message": "Success"}
+
+@router.patch("/questions/{id}")
+def edit_question(id: str, req: QuestionPatchRequest, db: Connection = Depends(get_db)):
+    """Updates a question inside an assessment."""
+    updates = []
+    params = []
+    if req.prompt is not None:
+        updates.append("prompt = ?")
+        params.append(req.prompt)
+    if req.choices is not None:
+        updates.append("choices = ?")
+        params.append(req.choices)
+    if req.correct_answer is not None:
+        updates.append("correct_answer = ?")
+        params.append(req.correct_answer)
+    if req.explanation is not None:
+        updates.append("explanation = ?")
+        params.append(req.explanation)
+    if req.difficulty is not None:
+        updates.append("difficulty = ?")
+        params.append(req.difficulty)
+        
+    if not updates:
+        return {"message": "Success"}
+        
+    updates.append("updated_at = ?")
+    params.append(datetime.utcnow().isoformat())
+    params.append(id)
+    
+    query = f"UPDATE questions SET {', '.join(updates)} WHERE id = ?"
+    db.execute(query, tuple(params))
+    db.commit()
+    return {"message": "Success"}
+
 @router.delete("/assessments/{id}")
 def delete_assessment(id: str, db: Connection = Depends(get_db)):
     """Soft deletes an assessment."""
@@ -276,6 +401,13 @@ def create_assignment(req: AssignmentPostRequest, db: Connection = Depends(get_d
         "rubric": req.rubric,
         "dueDate": req.dueDate
     }
+
+@router.patch("/assignments/{id}")
+def edit_assignment(id: str, req: AssignmentPatchRequest, db: Connection = Depends(get_db)):
+    """Updates an existing assignment."""
+    update_assignment(db, id, req.title, req.description, req.rubric, req.dueDate, req.status)
+    db.commit()
+    return {"message": "Success"}
 
 @router.delete("/assignments/{id}")
 def delete_assignment(id: str, db: Connection = Depends(get_db)):

@@ -37,3 +37,7 @@ backend/database/smilai.db-journal
 backend/database/chroma_storage/
 database/
 backend/crash_log.txt
+backend/src/python/crash_log.txt
+backend/src/python/database/
+.tempmediaStorage/
+scratchpad_*.md

@@ -33,12 +33,13 @@ tts_init_error = ""
 
 def get_whisper_model():
     global whisper_model
+    from ..core.config import active_profile
     if whisper_model is None:
-        logger.info("Booting up Local Whisper STT Engine...")
+        logger.info(f"Booting up Local Whisper STT Engine ({active_profile.whisper_model})...")
         try:
             from faster_whisper import WhisperModel
             # STT stays on CPU to keep VRAM free for LLM/Parler
-            whisper_model = WhisperModel("base.en", device="cpu", compute_type="int8")
+            whisper_model = WhisperModel(active_profile.whisper_model, device="cpu", compute_type="int8")
         except ImportError:
             logger.error("faster_whisper is not installed.")
             raise RuntimeError("faster_whisper is not installed. Voice STT unavailable.")
@@ -49,33 +50,36 @@ def initialize_tts_engine():
     logger.error(f"UVICORN WORKER EXEC: {sys.executable}")
     logger.error(f"UVICORN WORKER PATH: {sys.path}")
     global parler_model, parler_tokenizer, piper_voice, tts_engine_initialized, tts_init_error
+    from ..core.config import active_profile
+    
     if tts_engine_initialized and (parler_model is not None or piper_voice is not None):
         return
     
     logger.info("Booting up Two-Tier TTS Engine...")
     
-    # 1. Try Loading Parler-TTS (Indian Accent) on GPU
-    try:
-        import torch
-        if torch.cuda.is_available():
-            free_mem, _ = torch.cuda.mem_get_info()
-            if free_mem > 2 * 1024 * 1024 * 1024:
-                from parler_tts import ParlerTTSForConditionalGeneration
-                from transformers import AutoTokenizer
-                logger.info("GPU detected with >2GB VRAM. Loading ai4bharat/indic-parler-tts...")
-                parler_model = ParlerTTSForConditionalGeneration.from_pretrained("ai4bharat/indic-parler-tts").to("cuda")
-                parler_tokenizer = AutoTokenizer.from_pretrained("ai4bharat/indic-parler-tts")
-                logger.info("Indic Parler-TTS loaded successfully on GPU.")
+    # 1. Try Loading Parler-TTS (Indian Accent) on GPU if enabled in profile
+    if active_profile.tts_engine == "parler":
+        try:
+            import torch
+            if torch.cuda.is_available():
+                free_mem, _ = torch.cuda.mem_get_info()
+                if free_mem > 2 * 1024 * 1024 * 1024:
+                    from parler_tts import ParlerTTSForConditionalGeneration
+                    from transformers import AutoTokenizer
+                    logger.info("GPU detected with >2GB VRAM. Loading ai4bharat/indic-parler-tts...")
+                    parler_model = ParlerTTSForConditionalGeneration.from_pretrained("ai4bharat/indic-parler-tts").to("cuda")
+                    parler_tokenizer = AutoTokenizer.from_pretrained("ai4bharat/indic-parler-tts")
+                    logger.info("Indic Parler-TTS loaded successfully on GPU.")
+                else:
+                    logger.warning(f"Not enough VRAM for Parler-TTS (Free: {free_mem/(1024**3):.2f}GB). Falling back to Piper.")
             else:
-                logger.warning(f"Not enough VRAM for Parler-TTS (Free: {free_mem/(1024**3):.2f}GB). Falling back to Piper.")
-        else:
-            logger.warning("No GPU detected for Parler-TTS. Skipping to fallback.")
-    except Exception as e:
-        import traceback
-        tts_init_error = f"Parler error: {traceback.format_exc()}"
-        logger.error(f"Parler-TTS unavailable ({e}). Skipping to fallback.")
-        parler_model = None
-        parler_tokenizer = None
+                logger.warning("No GPU detected for Parler-TTS. Skipping to fallback.")
+        except Exception as e:
+            import traceback
+            tts_init_error = f"Parler error: {traceback.format_exc()}"
+            logger.error(f"Parler-TTS unavailable ({e}). Skipping to fallback.")
+            parler_model = None
+            parler_tokenizer = None
 
     # 2. Try Loading Piper (CPU Fallback)
     if parler_model is None:

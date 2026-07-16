@@ -7,16 +7,11 @@ client = TestClient(app)
 def test_full_admin_integration_lifecycle():
     subject_id = "a7f984b9-ae55-41af-ba93-0bced1614c57"
     
-    # 1. Subject Ingest Bulk Documents
-    payload = {
-        "documents": [
-            {
-                "name": "integration_test.txt",
-                "content": "SmilAI is an offline learning solution for students and teachers."
-            }
-        ]
+    # 1. Subject Ingest Documents
+    files = {
+        "file": ("integration_test.txt", b"SmilAI is an offline learning solution for students and teachers.")
     }
-    response = client.post(f"/v1/subjects/{subject_id}/documents/bulk", json=payload)
+    response = client.post(f"/v1/subjects/{subject_id}/documents/upload", files=files)
     assert response.status_code == 200
     doc_id = response.json()["documents"][0]["id"]
     

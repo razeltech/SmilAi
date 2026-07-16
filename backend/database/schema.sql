@@ -193,6 +193,39 @@ CREATE TABLE IF NOT EXISTS audit_logs (
     FOREIGN KEY(user_id) REFERENCES users(id)
 );
 
+CREATE TABLE IF NOT EXISTS concept_mastery (
+    student_id TEXT NOT NULL,
+    subject_id TEXT NOT NULL,
+    concept TEXT NOT NULL,
+    mastery_score REAL NOT NULL DEFAULT 0.0,
+    confidence REAL NOT NULL DEFAULT 0.0,
+    evidence_count INTEGER NOT NULL DEFAULT 0,
+    correct_answers INTEGER NOT NULL DEFAULT 0,
+    incorrect_answers INTEGER NOT NULL DEFAULT 0,
+    last_seen_at TEXT,
+    last_mastered_at TEXT,
+    review_count INTEGER NOT NULL DEFAULT 0,
+    next_review_at TEXT,
+    updated_at TEXT NOT NULL,
+    PRIMARY KEY(student_id, subject_id, concept),
+    FOREIGN KEY(student_id) REFERENCES users(id),
+    FOREIGN KEY(subject_id) REFERENCES subjects(id)
+);
+
+CREATE TABLE IF NOT EXISTS revision_plans (
+    id TEXT PRIMARY KEY,
+    student_id TEXT NOT NULL,
+    subject_id TEXT NOT NULL,
+    concept TEXT NOT NULL,
+    priority_score INTEGER NOT NULL DEFAULT 50,
+    scheduled_date TEXT NOT NULL,
+    status TEXT CHECK(status IN ('pending', 'completed', 'skipped')) NOT NULL DEFAULT 'pending',
+    created_at TEXT NOT NULL,
+    completed_at TEXT,
+    FOREIGN KEY(student_id) REFERENCES users(id),
+    FOREIGN KEY(subject_id) REFERENCES subjects(id)
+);
+
 -- Performance Indexes
 CREATE INDEX IF NOT EXISTS idx_documents_subject ON documents(subject_id);
 CREATE INDEX IF NOT EXISTS idx_chunks_doc ON chunks(doc_id);
