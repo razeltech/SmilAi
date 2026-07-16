@@ -12,6 +12,8 @@ from ..database.connection import get_db
 from .schemas import ChatRequest
 from ..rag.retrieve import staged_hybrid_search
 from ..rag.inference import generate_rag_response_stream, prepare_search_query
+from ..core.context import RequestContext
+from ..core.dependencies import get_request_context
 
 router = APIRouter(prefix="/chat", tags=["Chat & Inference"])
 
@@ -238,24 +240,21 @@ async def chat_stream_generator(request: ChatRequest, client_request: Request):
         raise
 
 @router.post("/stream")
-async def stream_chat(chat_request: ChatRequest, request: Request, db: Connection = Depends(get_db)):
+async def stream_chat(
+    chat_request: ChatRequest, 
+    request: Request, 
+    db: Connection = Depends(get_db),
+    context: RequestContext = Depends(get_request_context)
+):
     """
     Primary RAG endpoint. Uses StreamingResponse to ensure the student never 
     sees a loading wheel, adhering to the 'Humanized Latency' design pattern.
     """
     from ..rag.guardrails import check_prompt
     from ..language.dependencies import get_language_adapter
-    from ..core.context import RequestContext, UserContext, LanguageContext, AcademicContext
     
     # 1. Guardrails Layer: fast offline check
     cleaned_message = check_prompt(chat_request.message)
-    
-    # Construct Context (Mocking locale as en-US for now)
-    context = RequestContext(
-        user=UserContext(user_id=chat_request.user_id, role="student", persona="teacher"),
-        language=LanguageContext(source_locale="en-US", target_locale="en-US", script="latn", rtl=False),
-        academic=AcademicContext(subject=chat_request.subject_id, grade="Class 10")
-    )
     
     adapter = get_language_adapter()
     english_query = adapter.inbound(cleaned_message, context)

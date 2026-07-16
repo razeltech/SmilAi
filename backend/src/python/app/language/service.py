@@ -1,5 +1,4 @@
 from .normalizer import TextNormalizer
-from .detector import LanguageDetector
 from .glossary import Glossary
 from .providers import LanguageProvider
 from .cache import CacheProvider
@@ -8,11 +7,10 @@ from ..core.context import RequestContext
 class LanguageService:
     """
     Orchestrates the language pipeline.
-    Flow: Detect -> Normalize -> Cache -> Glossary -> Translate -> Post-Process
+    Flow: Normalize -> Cache -> Glossary -> Translate -> Post-Process
     """
     def __init__(self, provider: LanguageProvider, cache: CacheProvider):
         self.normalizer = TextNormalizer()
-        self.detector = LanguageDetector()
         self.glossary = Glossary()
         self.provider = provider
         self.cache = cache
@@ -21,11 +19,8 @@ class LanguageService:
         """Translates user text to English Core."""
         # 1. Normalize
         text = self.normalizer.normalize(raw_text)
-        
-        # 2. Detect (if locale isn't explicitly set, stub for now)
-        detected_locale = self.detector.detect(text)
 
-        # 3. Cache lookup
+        # 2. Cache lookup
         cached = self.cache.get(text, context)
         if cached:
             return cached
