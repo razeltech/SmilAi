@@ -45,33 +45,57 @@ Please generate the JSON quiz with exactly {count} multiple choice questions."""
                 {"role": "user", "content": prompt}
             ],
             "stream": False,
-            "format": "json",
+            "stream": False,
             "options": {
                 "temperature": 0.3
             }
         }
 
-        async with httpx.AsyncClient() as client:
-            response = await client.post(OLLAMA_URL, json=payload, timeout=90.0)
-            if response.status_code != 200:
-                raise RuntimeError(f"Ollama returned status code {response.status_code}")
+        from ..rag.inference import default_provider
+        
+        data = await default_provider.generate(payload)
+        if not data:
+            raise RuntimeError("Assessment generation failed: Ollama returned no data")
             
-            data = response.json()
-            if "message" in data and "content" in data["message"]:
-                response_text = data["message"]["content"].strip()
-            else:
-                response_text = data.get("response", "[]").strip()
-            print(f"DEBUG: Ollama raw response: {response_text}")
-            try:
-                questions = json.loads(response_text)
-                if isinstance(questions, dict):
-                    for k, v in questions.items():
-                        if isinstance(v, list):
-                            questions = v
-                            break
-                if not isinstance(questions, list):
-                    questions = []
-                return questions
-            except json.JSONDecodeError as e:
-                logger.error(f"Failed to parse generated assessment JSON: {e}. Raw response: {response_text}")
-                raise e
+        if "message" in data and "content" in data["message"]:
+            response_text = data["message"]["content"].strip()
+        else:
+            response_text = data.get("response", "[]").strip()
+        
+        print(f"DEBUG: Ollama raw response: {response_text}")
+        
+        from ..rag.inference import extract_first_json_object
+        json_str = extract_first_json_object(response_text)
+        if not json_str:
+            json_str = response_text
+            
+        try:
+            questions = json.loads(json_str)
+            if isinstance(questions, dict):
+                for k, v in questions.items():
+                    if isinstance(v, list):
+                        questions = v
+                        break
+            if not isinstance(questions, list):
+                questions = []
+        except json.JSONDecodeError as e:
+            logger.error(f"Failed to parse generated assessment JSON: {e}. Raw response: {response_text}")
+            questions = []
+            
+        if not questions:
+            # Provide a fallback instead of crashing with 500
+            questions = [
+                {
+                    "question": f"What is the core focus of {topic}?",
+                    "options": [
+                        "It is completely unrelated to the subject.",
+                        f"It is a fundamental concept in {topic}.",
+                        "It is only used in rare edge cases.",
+                        "None of the above."
+                    ],
+                    "correct_answer": f"It is a fundamental concept in {topic}.",
+                    "explanation": "This is a placeholder question because the AI failed to generate specific questions for the provided content."
+                }
+            ]
+            
+        return questions

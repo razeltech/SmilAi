@@ -50,15 +50,36 @@ def chunk_text(text: str, chunk_size: int = 500, overlap: int = 50):
 
 def process_and_ingest_pdf(pdf_bytes: bytes, filename: str, org_id: str, subject_id: str, uploader_id: str):
     """
-    1. Reads PDF bytes from the teacher upload.
-    2. Chunks the text logically.
-    3. Generates vector embeddings.
-    4. Saves to SQLite (Metadata) AND ChromaDB (Vectors) for the Staged Hybrid RAG.
+    1. Reads PDF or Image bytes from the teacher upload.
+    2. Extracts text using PyMuPDF and EasyOCR.
+    3. Chunks the text logically.
+    4. Generates vector embeddings.
+    5. Saves to SQLite (Metadata) AND ChromaDB (Vectors) for the Staged Hybrid RAG.
     """
-    doc = fitz.open(stream=pdf_bytes, filetype="pdf")
+    filename_lower = filename.lower()
     full_text = ""
-    for page in doc:
-        full_text += page.get_text("text") + "\n"
+    
+    if filename_lower.endswith(".pdf"):
+        doc = fitz.open(stream=pdf_bytes, filetype="pdf")
+        for page in doc:
+            text = page.get_text("text").strip()
+            
+            if len(text) < 50:
+                from ..language.ocr import ocr_provider
+                pix = page.get_pixmap(dpi=150)
+                img_bytes = pix.tobytes("png")
+                ocr_text = ocr_provider.extract_text(img_bytes)
+                if ocr_text:
+                    text = (text + "\n" + ocr_text).strip()
+                    
+            full_text += text + "\n\n"
+            
+    elif filename_lower.endswith((".png", ".jpg", ".jpeg")):
+        from ..language.ocr import ocr_provider
+        full_text = ocr_provider.extract_text(pdf_bytes)
+        
+    else:
+        raise ValueError(f"Unsupported file format: {filename}")
         
     chunks = chunk_text(full_text)
     

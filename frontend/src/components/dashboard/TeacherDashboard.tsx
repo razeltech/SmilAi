@@ -27,69 +27,13 @@ export default function TeacherDashboard({ user, subject }: TeacherDashboardProp
   const [success, setSuccess] = useState('');
 
   // Form states
-  const [filesToUpload, setFilesToUpload] = useState<{name: string, content: string, parserType: 'auto' | 'python' | 'cpp' | 'ocr' | 'text', type: string}[]>([]);
+  const [filesToUpload, setFilesToUpload] = useState<File[]>([]);
   const [isDragging, setIsDragging] = useState(false);
-
-  const processFile = (file: File): Promise<void> => {
-    return new Promise((resolve) => {
-      const ext = file.name.split('.').pop()?.toLowerCase();
-      let parserType: 'auto' | 'python' | 'cpp' | 'ocr' | 'text' = 'auto';
-      if (ext === 'py') {
-        parserType = 'python';
-      } else if (['cpp', 'h', 'cc', 'hpp'].includes(ext || '')) {
-        parserType = 'cpp';
-      } else if (['png', 'jpg', 'jpeg', 'pdf'].includes(ext || '')) {
-        parserType = 'ocr';
-      } else {
-        parserType = 'text';
-      }
-
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        const text = e.target?.result as string;
-        let finalContent = text || '';
-        
-        if (ext === 'png' || ext === 'jpg' || ext === 'jpeg') {
-          // Fake low confidence occasionally for demonstration
-          const confidence = Math.random() > 0.7 ? 75.4 : 94.6;
-          finalContent = `--- SCAN REPORT ---\nFILE: ${file.name}\nRESOLUTION: High\nCONFIDENCE: ${confidence}%\n\nCHAPTER: ADVANCED DATA STRUCTURES\n\n1. INTRODUCTION TO BINARY TREES\nEvery node has at most two children. Left children store lesser values, right store greater.\n\n2. TIME COMPLEXITY ANALYSIS\nSearch: O(log N) average, O(N) worst case.\nSpace: O(N) representation.`;
-        } else if (ext === 'html' || ext === 'htm') {
-          const parser = new DOMParser();
-          const doc = parser.parseFromString(text, 'text/html');
-          const cleaned = doc.body.textContent || doc.documentElement.textContent || text;
-          finalContent = cleaned.trim().replace(/\s+/g, ' ');
-        } else if (ext === 'pdf') {
-          const simulatedPageCount = Math.max(1, Math.ceil(file.size / 1500));
-          const confidence = Math.random() > 0.7 ? 72.1 : 96.3; // Randomly flag some PDFs as low confidence
-          finalContent = `--- AP STATE BOARD PDF TEXTBOOK LAYOUT EXTRACTOR ---\nFILE: ${file.name}\nSIZE: ${(file.size / 1024).toFixed(1)} KB\nPAGES DETECTED: ${simulatedPageCount}\nCONFIDENCE: ${confidence}%\nINGESTION RAG STATUS: Complete\n\n[PAGE 1: INDEX & OVERVIEW]\nSyllabus alignment under Andhra Pradesh SCERT curriculum guidelines. This document outlines active training parameters, learning indicators, and formative assessments.\n\n[PAGE 2: DETAILED STUDY MATERIAL]\nEssential core concepts, step-by-step mathematical examples, and scientific procedures related to: ${file.name.replace(/\.[^/.]+$/, "").replace(/_/g, " ")}. \n\n1. CONCEPT DEFINITION:\nPrimary formulations and educational guides for students. Ideal for patient, conversational, and personalized virtual-tutoring responses.`;
-        } else if (['docx', 'doc'].includes(ext || '')) {
-          finalContent = `--- WORD TEXTBOOK DOCUMENT PARSED ---\nFILE: ${file.name}\nFORMAT: Office Open XML Document\n\n[SUBJECT SYLLABUS DIRECTIVE]\nTopic: ${file.name.replace(/\.[^/.]+$/, "").replace(/_/g, " ")}\n\n1. CORE ACADEMIC OBJECTIVE\nTo understand the fundamental tenets of this chapter including core formulas, diagrams, and historical timelines.\n\n2. PRACTICE ASSIGNMENTS\n- Write an essay or solver script to demonstrate understanding.\n- Present solutions in simple, friendly, and digestible language.`;
-        } else if (['xlsx', 'xls'].includes(ext || '')) {
-          finalContent = `--- EXCEL SPREADSHEET TABLE STRUCTURE PARSED ---\nFILE: ${file.name}\nGRID COLUMNS: StudentID, Name, SubjectScore, AttendancePercentage, PerformanceIndicator\n\nROW 1: AP-101, Rahul Kumar, 95%, 98%, Outstanding\nROW 2: AP-102, Sree Lekha, 92%, 95%, Excellent\nROW 3: AP-103, Venkatesh, 88%, 91%, Very Good\nROW 4: AP-104, Priya, 74%, 85%, Good\nROW 5: AP-105, Anand, 61%, 80%, Satisfactory\n\n[SUMMARY PERFORMANCE ANALYSIS]\nClass Average: 82%\nTotal Records Processed: 5 Active Records`;
-        }
-
-        setFilesToUpload(prev => [...prev, {
-          name: file.name,
-          content: finalContent,
-          parserType,
-          type: 'library'
-        }]);
-        resolve();
-      };
-
-      if (ext === 'png' || ext === 'jpg' || ext === 'jpeg') {
-        reader.readAsDataURL(file);
-      } else {
-        reader.readAsText(file);
-      }
-    });
-  };
 
   const handleFilesChange = async (files: FileList | File[]) => {
     if (!files || files.length === 0) return;
-    for (let i = 0; i < files.length; i++) {
-      await processFile(files[i]);
-    }
+    const newFiles = Array.from(files);
+    setFilesToUpload(prev => [...prev, ...newFiles]);
   };
 
   const handleDragOver = (e: React.DragEvent) => {
@@ -339,20 +283,29 @@ export default function TeacherDashboard({ user, subject }: TeacherDashboardProp
     setLoading(true);
 
     try {
-      const res = await fetch(`/v1/subjects/${subject.id}/documents/bulk`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ documents: filesToUpload })
-      });
-      if (!res.ok) throw new Error('Upload failed');
-      const data = await res.json();
+      let processedCount = 0;
+      let totalChunks = 0;
       
-      const reviewCount = data.documents.filter((d: any) => d.status === 'needs_review').length;
-      let msg = `Successfully ingested ${data.processedCount} document(s) into ${data.totalChunks} RAG chunks.`;
-      if (reviewCount > 0) {
-        msg += ` ${reviewCount} document(s) flagged for low OCR confidence and need review.`;
+      for (const file of filesToUpload) {
+        const formData = new FormData();
+        formData.append('file', file);
+        
+        const res = await fetch(`/v1/subjects/${subject.id}/documents/upload`, {
+          method: 'POST',
+          body: formData
+        });
+        
+        if (!res.ok) {
+          const errData = await res.json().catch(() => ({}));
+          throw new Error(errData.detail || `Upload failed for ${file.name}`);
+        }
+        
+        const data = await res.json();
+        processedCount += data.processedCount || 1;
+        totalChunks += data.totalChunks || 0;
       }
-      setSuccess(msg);
+      
+      setSuccess(`Successfully ingested ${processedCount} document(s) into ${totalChunks} RAG chunks using Real OCR!`);
       setFilesToUpload([]);
       fetchData();
     } catch (err: any) {
@@ -618,9 +571,11 @@ export default function TeacherDashboard({ user, subject }: TeacherDashboardProp
                     <div className="space-y-2 max-h-48 overflow-y-auto pr-2">
                       {filesToUpload.map((f, idx) => (
                         <div key={idx} className="flex items-center justify-between p-2 text-sm border border-slate-200 rounded-lg bg-slate-50">
-                          <span className="truncate font-medium text-slate-700 max-w-[150px]" title={f.name}>{f.name}</span>
+                          <span className="truncate font-medium text-slate-700 max-w-[200px]" title={f.name}>{f.name}</span>
                           <div className="flex items-center gap-2">
-                            <span className="text-[10px] font-bold text-teal-600 bg-teal-100 px-1.5 py-0.5 rounded uppercase">{f.parserType}</span>
+                            <span className="text-[10px] font-bold text-teal-600 bg-teal-100 px-1.5 py-0.5 rounded uppercase">
+                              {(f.name.split('.').pop() || 'file').toUpperCase()}
+                            </span>
                             <button 
                               type="button" 
                               onClick={() => setFilesToUpload(prev => prev.filter((_, i) => i !== idx))}

@@ -6,6 +6,7 @@ from fastapi import UploadFile, HTTPException
 from ..database.connection import get_db_connection
 from ..database.vector_db import VectorDB
 from ..core.config import active_profile
+from ..language.ocr import ocr_provider
 
 logger = logging.getLogger(__name__)
 
@@ -53,10 +54,30 @@ async def extract_text_from_upload(file: UploadFile) -> str:
         try:
             import fitz
             doc = fitz.open(stream=content_bytes, filetype="pdf")
-            text = "\n\n".join(page.get_text("text") for page in doc)
-            return text
+            
+            full_text = []
+            for page in doc:
+                text = page.get_text("text").strip()
+                
+                # Smart Fallback: If page text is very sparse, it might be a scanned image
+                if len(text) < 50:
+                    logger.info(f"Page text sparse ({len(text)} chars). Attempting OCR fallback...")
+                    pix = page.get_pixmap(dpi=150) # Render page to image
+                    img_bytes = pix.tobytes("png")
+                    ocr_text = ocr_provider.extract_text(img_bytes)
+                    if ocr_text:
+                        text = (text + "\n" + ocr_text).strip()
+                        
+                full_text.append(text)
+                
+            return "\n\n".join(full_text)
         except ImportError:
             raise HTTPException(status_code=500, detail="PyMuPDF (fitz) is not installed.")
+            
+    elif filename.endswith(".png") or filename.endswith(".jpg") or filename.endswith(".jpeg"):
+        logger.info(f"Direct image upload detected: {filename}. Running OCR...")
+        text = ocr_provider.extract_text(content_bytes)
+        return text
             
     elif filename.endswith(".docx"):
         try:
@@ -72,7 +93,7 @@ async def extract_text_from_upload(file: UploadFile) -> str:
         return content_bytes.decode("utf-8", errors="replace")
         
     else:
-        raise HTTPException(status_code=400, detail="Unsupported file format. Please upload PDF, DOCX, TXT, or MD.")
+        raise HTTPException(status_code=400, detail="Unsupported file format. Please upload PDF, DOCX, TXT, MD, PNG, or JPG.")
 
 async def process_document_upload(file: UploadFile, org_id: str, subject_id: str) -> dict:
     """

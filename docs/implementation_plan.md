@@ -34,28 +34,28 @@ Thank you for the answers! Based on your feedback, here are my recommendations a
 
 ### Phase 1: Python FastAPI & Auth Engine (Days 1 - 3)
 *Goal: Establish the core API product and humanized streaming.*
-- [ ] Implement `main.py` FastAPI server.
-- [ ] Build the JWT Authentication and User/School Registration endpoints.
-- [ ] Connect FastAPI to the unified SQLite `schema.sql` database.
-- [ ] Implement the **"Humanized Streaming Route"**: When a chat request starts, instantly stream back a predefined voice-friendly filler like *"Hmm, let me think about that for a second..."* before the RAG pipeline begins, ensuring immediate engagement for young students.
+- [x] Implement `main.py` FastAPI server.
+- [x] Build the JWT Authentication and User/School Registration endpoints.
+- [x] Connect FastAPI to the unified SQLite `schema.sql` database.
+- [x] Implement the **"Humanized Streaming Route"**: When a chat request starts, instantly stream back a predefined voice-friendly filler like *"Hmm, let me think about that for a second..."* before the RAG pipeline begins, ensuring immediate engagement for young students.
 
 ### Phase 2: RAG Ingestion & Hybrid Search (Days 4 - 7)
 *Goal: The ability to upload curriculums and search them perfectly.*
-- [ ] Build the **Ingestion Pipeline**: Read textbooks -> Semantic Chunking -> Save to ChromaDB.
-- [ ] Build the **Staged Hybrid Retrieval**: SQL Metadata Filter -> Chroma Vector Search -> BM25 -> Cross-Encoder Reranker.
+- [x] Build the **Ingestion Pipeline**: Read textbooks -> Semantic Chunking -> Save to ChromaDB.
+- [x] Build the **Staged Hybrid Retrieval**: SQL Metadata Filter -> Chroma Vector Search -> BM25 -> Cross-Encoder Reranker.
 
 ### Phase 3: The Specialized Brains (Days 8 - 11)
 *Goal: Make Smiley adaptable to specific subjects.*
-- [ ] Connect the Ollama Qwen-2.5 API.
-- [ ] Inject the "Smiley" Persona prompt into the inference pipeline.
-- [ ] **Coding Brain**: Implement static code analysis logic grading.
-- [ ] **Assessment Brain**: Auto-generate tests and auto-grade them.
+- [x] Connect the Ollama Qwen-2.5 API.
+- [x] Inject the "Smiley" Persona prompt into the inference pipeline.
+- [x] **Coding Brain**: Implement static code analysis logic grading.
+- [x] **Assessment Brain**: Auto-generate tests and auto-grade them.
 
 ### Phase 4: Voice & Accent Training (Days 12 - 15)
-*Goal: Bring Smiley to life audibly.*
-- [ ] Integrate local STT (Faster-Whisper) to transcribe microphone input.
-- [ ] Implement British/American Accent Detection.
-- [ ] Integrate local TTS (Parler-TTS/Piper).
+*Goal: Bring Smiley to life audibly and help students practice spoken English.*
+- [x] Integrate local STT (Faster-Whisper) to transcribe microphone input.
+- [x] Integrate local TTS (Parler-TTS/Piper).
+- [ ] **Spoken English Practice (Pronunciation/Accent Assessment)**: Build a feedback loop where students practice speaking English (British/American target), and the AI analyzes the audio to correct their pronunciation.
 
 ### Phase 5: API Integration Testing (Pytest) (Days 16 - 18)
 *Goal: Validate the entire student/teacher workflow programmatically.*
@@ -77,11 +77,26 @@ Thank you for the answers! Based on your feedback, here are my recommendations a
 
 ### Phase 7.5: QA Bug Fixes (Day 26)
 *Goal: Address critical and medium bugs identified in v1.4.0 browser QA to ensure a stable demo.*
-- [ ] **Fix Student Profile tab crash**: Add optional chaining and fallback values (`user?.name`, `user?.email`) in `StudentDashboard.tsx` to prevent `undefined` runtime errors when rendering the digital passport.
-- [ ] **Fix Student Learning Progress history**: Add cache-busting headers or force React state invalidation in `fetchStudentRecords()` inside `StudentDashboard.tsx` so that history reliably updates immediately after a quiz submission.
-- [ ] **Fix Chat text input handling**: Stabilize the `onChange` event binding for the chat input field to prevent lost keystrokes or lag during synthetic browser events.
+- [x] **Fix Student Profile tab crash**: Add optional chaining and fallback values (`user?.name`, `user?.email`) in `StudentDashboard.tsx` to prevent `undefined` runtime errors when rendering the digital passport.
+- [x] **Fix Student Learning Progress history**: Add cache-busting headers or force React state invalidation in `fetchStudentRecords()` inside `StudentDashboard.tsx` so that history reliably updates immediately after a quiz submission.
+- [x] **Fix Chat text input handling**: Stabilize the `onChange` event binding for the chat input field to prevent lost keystrokes or lag during synthetic browser events.
 
-### Phase 8: Multi-Language Support (In Progress)
+### Phase 8: OCR Pipeline Implementation (Completed)
+*Goal: Enable offline parsing of scanned textbooks and handwritten notes, ensuring support for regional languages.*
+
+#### Technical Approach:
+1. **Engine**: Integrate `easyocr` because it runs completely offline, uses GPU acceleration, and natively supports over 80 languages (including English, Hindi, and Telugu) out of the box.
+2. **`OCRProvider` Module (`app/language/ocr.py`)**: 
+   - Build a globally cached `easyocr.Reader(['en', 'hi', 'te'], gpu=True)` instance to avoid reloading weights.
+   - Implement `extract_text_from_image(image_bytes)` which converts bytes to a NumPy array/Pillow image and extracts the text blocks.
+3. **Update Ingestion Pipeline (`app/documents/ingestion.py`)**:
+   - **Direct Image Support**: Add `.png`, `.jpg`, and `.jpeg` as accepted upload formats. When uploaded, send them directly to the `OCRProvider`.
+   - **Smart PDF Fallback**: When processing a `.pdf` with PyMuPDF (`fitz`), attempt to extract the raw text layer. If the text layer is empty (or very sparse) but the page contains images (a scanned textbook), use `page.get_pixmap()` to render the page to a PNG and pass it to the `OCRProvider` to extract the text.
+
+#### Open Questions for OCR:
+- **Language Models**: By default, I will configure the OCR reader to load `['en', 'hi', 'te']` (English, Hindi, Telugu) into memory. Loading too many languages at once slows down detection. Is this set of 3 languages correct for your target demographic?
+
+### Phase 9: Multi-Language Support (Following Phase 8)
 *Goal: Ensure SmilAI can support students in multiple Indian languages using the offline IndicTrans2 engine.*
 - [ ] **Language Toggle**: Update frontend UI to include a global language selection dropdown (English, Hindi, Telugu, etc.).
 - [ ] **IndicTrans2 Backend Integration**: Adapt the provided `04_translate_segments_any_language.py` logic into a reusable `TranslationProvider` in FastAPI.

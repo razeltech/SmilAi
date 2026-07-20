@@ -14,8 +14,8 @@ async def upload_document(
     Teacher 'Library Mode' upload endpoint.
     Takes a PDF curriculum file and securely ingests it into the Staged Hybrid RAG system.
     """
-    if not file.filename.endswith(".pdf"):
-        raise HTTPException(status_code=400, detail="Only PDF files are supported for ingestion.")
+    if not file.filename.lower().endswith((".pdf", ".png", ".jpg", ".jpeg")):
+        raise HTTPException(status_code=400, detail="Only PDF and Image files (PNG, JPG) are supported for ingestion.")
     
     try:
         pdf_bytes = await file.read()

@@ -20,6 +20,7 @@ def get_subject_documents(subjectId: str, db: Connection = Depends(get_db)):
             "subjectId": r["subject_id"],
             "orgId": r["org_id"],
             "name": r["name"],
+            "content": r["content"],
             "type": r["type"],
             "chunkCount": r["chunk_count"],
             "uploadedAt": r["uploaded_at"],
