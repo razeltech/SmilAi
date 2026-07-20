@@ -1,6 +1,7 @@
 import io
 import logging
-from PIL import Image
+import threading
+from PIL import Image, UnidentifiedImageError
 import numpy as np
 
 logger = logging.getLogger(__name__)
@@ -9,28 +10,46 @@ class OCRProvider:
     def __init__(self):
         self.reader = None
         self.initialized = False
+        self._lock = threading.Lock()
 
     def initialize(self):
         if self.initialized:
             return
-        
-        try:
-            import easyocr
-            import torch
             
-            # Enable GPU if torch detects CUDA
-            use_gpu = torch.cuda.is_available()
-            
-            logger.info(f"Booting up Offline EasyOCR Engine (en, hi, te). GPU Enabled: {use_gpu}...")
-            self.reader = easyocr.Reader(['en', 'hi', 'te'], gpu=use_gpu)
-            self.initialized = True
-            logger.info("EasyOCR loaded successfully.")
-        except ImportError:
-            logger.error("easyocr or torch is not installed.")
-            self.reader = None
-        except Exception as e:
-            logger.error(f"Failed to initialize EasyOCR: {e}")
-            self.reader = None
+        with self._lock:
+            # Double-checked locking
+            if self.initialized:
+                return
+                
+            try:
+                import easyocr
+                import torch
+                
+                # Enable GPU if torch detects CUDA
+                use_gpu = torch.cuda.is_available()
+                
+                logger.info(f"Booting up Offline EasyOCR Engine (en, hi). GPU Enabled: {use_gpu}...")
+                self.reader = easyocr.Reader(['en', 'hi'], gpu=use_gpu)
+                self.initialized = True
+                logger.info("EasyOCR loaded successfully.")
+            except ImportError:
+                logger.error("easyocr or torch is not installed.")
+                self.reader = None
+                self.initialized = True  # Prevent repeated import attempts
+            except Exception as e:
+                logger.error(f"Failed to initialize EasyOCR: {e}")
+                self.reader = None
+                self.initialized = True
+
+    def health(self) -> dict:
+        status = "healthy" if self.initialized and self.reader else "uninitialized"
+        if not self.reader and self.initialized:
+            status = "error"
+        return {
+            "status": status,
+            "engine": "easyocr",
+            "languages": ["en", "hi"] if self.reader else []
+        }
 
     def extract_text(self, image_data: bytes) -> str:
         self.initialize()
@@ -40,8 +59,22 @@ class OCRProvider:
             return ""
 
         try:
-            # Convert bytes to PIL Image, then to numpy array for EasyOCR
-            image = Image.open(io.BytesIO(image_data)).convert('RGB')
+            # Validate payload size (max 20MB)
+            if len(image_data) > 20 * 1024 * 1024:
+                raise ValueError(f"Image too large: {len(image_data)} bytes. Max allowed is 20MB.")
+                
+            # Convert bytes to PIL Image
+            try:
+                image = Image.open(io.BytesIO(image_data))
+            except UnidentifiedImageError:
+                raise ValueError("Uploaded file is not a valid image format supported by PIL.")
+                
+            # Validate dimensions to prevent OOM
+            MAX_DIMENSION = 8000
+            if image.width > MAX_DIMENSION or image.height > MAX_DIMENSION:
+                raise ValueError(f"Image dimensions too large: {image.width}x{image.height}. Max allowed is {MAX_DIMENSION}px.")
+
+            image = image.convert('RGB')
             img_np = np.array(image)
             
             # readtext returns a list of tuples: (bounding_box, text, confidence)
