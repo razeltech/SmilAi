@@ -51,6 +51,26 @@ class OCRProvider:
             "languages": ["en", "hi"] if self.reader else []
         }
 
+    def _preprocess_image(self, img_np: np.ndarray) -> np.ndarray:
+        """Applies grayscale and adaptive thresholding to improve OCR accuracy on scans."""
+        try:
+            import cv2
+            # Convert to grayscale
+            gray = cv2.cvtColor(img_np, cv2.COLOR_RGB2GRAY)
+            # Apply adaptive thresholding to handle uneven lighting in scanned notes
+            thresh = cv2.adaptiveThreshold(
+                gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 11, 2
+            )
+            # EasyOCR works best with 3-channel images, so convert back
+            processed = cv2.cvtColor(thresh, cv2.COLOR_GRAY2RGB)
+            return processed
+        except ImportError:
+            logger.warning("cv2 (OpenCV) is not installed, skipping image preprocessing.")
+            return img_np
+        except Exception as e:
+            logger.error(f"Image preprocessing failed: {e}")
+            return img_np
+
     def extract_text(self, image_data: bytes) -> str:
         self.initialize()
         
@@ -76,6 +96,9 @@ class OCRProvider:
 
             image = image.convert('RGB')
             img_np = np.array(image)
+            
+            # Apply Preprocessing (Step 2)
+            img_np = self._preprocess_image(img_np)
             
             # readtext returns a list of tuples: (bounding_box, text, confidence)
             # We use paragraph=True to group text blocks logically
