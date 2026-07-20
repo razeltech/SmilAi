@@ -246,7 +246,7 @@ class IndicTransProvider:
                     **inputs,
                     use_cache=True,
                     num_beams=5,
-                    max_length=GENERATION_MAX_NEW_TOKENS
+                    max_new_tokens=GENERATION_MAX_NEW_TOKENS
                 )
                 
                 decoded = self.tokenizer.batch_decode(outputs, skip_special_tokens=True)
