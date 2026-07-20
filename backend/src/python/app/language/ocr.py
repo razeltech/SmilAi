@@ -1,8 +1,24 @@
 import io
 import logging
 import threading
+from dataclasses import dataclass, field
+from typing import List
 from PIL import Image, UnidentifiedImageError
 import numpy as np
+
+@dataclass
+class OCRBlock:
+    text: str
+    confidence: float
+    bbox: list
+
+@dataclass
+class OCRResult:
+    text: str
+    average_confidence: float
+    blocks: List[OCRBlock]
+    engine: str
+    preprocessing: bool
 
 logger = logging.getLogger(__name__)
 
@@ -10,15 +26,16 @@ class OCRProvider:
     def __init__(self):
         self.reader = None
         self.initialized = False
+        self.initialization_attempted = False
         self._lock = threading.Lock()
 
     def initialize(self):
-        if self.initialized:
+        if self.initialized or self.initialization_attempted:
             return
             
         with self._lock:
             # Double-checked locking
-            if self.initialized:
+            if self.initialized or self.initialization_attempted:
                 return
                 
             try:
@@ -35,15 +52,17 @@ class OCRProvider:
             except ImportError:
                 logger.error("easyocr or torch is not installed.")
                 self.reader = None
-                self.initialized = True  # Prevent repeated import attempts
+                self.initialized = False
+                self.initialization_attempted = True
             except Exception as e:
                 logger.error(f"Failed to initialize EasyOCR: {e}")
                 self.reader = None
-                self.initialized = True
+                self.initialized = False
+                self.initialization_attempted = True
 
     def health(self) -> dict:
         status = "healthy" if self.initialized and self.reader else "uninitialized"
-        if not self.reader and self.initialized:
+        if not self.reader and self.initialization_attempted:
             status = "error"
         return {
             "status": status,
@@ -71,12 +90,12 @@ class OCRProvider:
             logger.error(f"Image preprocessing failed: {e}")
             return img_np
 
-    def extract_text(self, image_data: bytes) -> str:
+    def extract_text(self, image_data: bytes) -> OCRResult:
         self.initialize()
         
         if not self.reader:
             logger.warning("OCR is called but EasyOCR is not available.")
-            return ""
+            return OCRResult(text="", average_confidence=0.0, blocks=[], engine="easyocr", preprocessing=False)
 
         try:
             # Validate payload size (max 20MB)
@@ -104,13 +123,46 @@ class OCRProvider:
             # We use paragraph=True to group text blocks logically
             results = self.reader.readtext(img_np, paragraph=True)
             
-            # Join the extracted text blocks. For paragraph=True, result is (bbox, text)
-            extracted = "\n\n".join([text for (_, text) in results])
-            return extracted.strip()
+            blocks = []
+            total_confidence = 0.0
+            
+            for result in results:
+                if len(result) == 3:
+                    bbox, text, conf = result
+                elif len(result) == 2:
+                    bbox, text = result
+                    conf = 1.0  # Fallback if confidence is omitted
+                else:
+                    continue
+                    
+                blocks.append(OCRBlock(text=text, confidence=float(conf), bbox=bbox))
+                total_confidence += float(conf)
+                
+            extracted_text = "\n\n".join([b.text for b in blocks])
+            avg_conf = total_confidence / len(blocks) if blocks else 0.0
+            
+            return OCRResult(
+                text=extracted_text,
+                average_confidence=avg_conf,
+                blocks=blocks,
+                engine="easyocr",
+                preprocessing=True
+            )
             
         except Exception as e:
-            logger.error(f"OCR extraction failed: {e}")
-            return ""
+            import sys
+            has_gpu = False
+            if 'torch' in sys.modules:
+                import torch
+                has_gpu = torch.cuda.is_available()
+                
+            logger.error(
+                f"OCR extraction failed\n"
+                f"Engine: EasyOCR\n"
+                f"GPU: {has_gpu}\n"
+                f"Exception: {e}"
+            )
+            return OCRResult(text="", average_confidence=0.0, blocks=[], engine="easyocr", preprocessing=False)
 
 # Singleton instance
 ocr_provider = OCRProvider()
