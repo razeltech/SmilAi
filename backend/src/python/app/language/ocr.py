@@ -1,10 +1,12 @@
 import io
 import logging
 import threading
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import List, Any
 from PIL import Image, UnidentifiedImageError
 import numpy as np
+
+ENGINE_NAME = "easyocr"
 
 @dataclass
 class OCRBlock:
@@ -66,7 +68,7 @@ class OCRProvider:
             status = "error"
         return {
             "status": status,
-            "engine": "easyocr",
+            "engine": ENGINE_NAME,
             "languages": ["en", "hi"] if self.reader else []
         }
 
@@ -162,12 +164,12 @@ class OCRProvider:
                 
             logger.error(
                 f"OCR extraction failed\n"
-                f"Engine: EasyOCR\n"
+                f"Engine: {ENGINE_NAME}\n"
                 f"GPU: {has_gpu}\n"
                 f"Image: {img_w}x{img_h} ({size_mb:.2f} MB)\n"
                 f"Exception: {e}"
             )
-            return OCRResult(text="", average_confidence=0.0, blocks=[], engine="easyocr", preprocessing=False)
+            return OCRResult(text="", average_confidence=0.0, blocks=[], engine=ENGINE_NAME, preprocessing=False)
 
 # Singleton instance
 ocr_provider = OCRProvider()
