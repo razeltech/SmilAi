@@ -17,13 +17,7 @@ from ..core.dependencies import get_request_context
 
 router = APIRouter(prefix="/chat", tags=["Chat & Inference"])
 
-# Gentle, motherly filler phrases to hide search latency (not used for casual greeting)
-FILLER_PHRASES = [
-    "Let me search our subject documents to find the best answer...",
-    "One moment, I am retrieving the reference textbook content...",
-    "Hmm, let me search my syllabus files for that...",
-    "Give me just a second to lookup the relevant facts in our curriculum..."
-]
+
 
 def is_smalltalk(msg: str) -> bool:
     cleaned = msg.strip().lower().replace("?", "").replace("!", "").replace(".", "").strip()
@@ -122,10 +116,6 @@ async def chat_stream_generator(request: ChatRequest, client_request: Request):
         retrieval_time_ms = 0
         
         if not smalltalk:
-            # 1. Instantly return a gentle filler phrase so the UI/TTS can start playing it
-            filler = random.choice(FILLER_PHRASES)
-            yield f"{filler}\n\n"
-            
             # Prepare search query (optional rewrite)
             rewrite_data = await prepare_search_query(request.message, history)
             search_query = rewrite_data["query"]

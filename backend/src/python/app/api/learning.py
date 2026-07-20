@@ -6,7 +6,7 @@ from ..learning_engine.analytics_service import generate_analytics, get_mastery_
 from ..learning_engine.revision_service import generate_revision_plan, get_revision_plan
 from ..core.config import active_profile
 
-router = APIRouter(tags=["Adaptive Learning"])
+router = APIRouter(prefix="/learning", tags=["Adaptive Learning"])
 
 @router.get("/mastery/{student_id}")
 def get_student_mastery(student_id: str, subjectId: str, db: Connection = Depends(get_db)):

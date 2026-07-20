@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { BookOpen, Code, FileText, Send, Mic, MicOff, Volume2, VolumeX, CheckCircle, HelpCircle, Award, BarChart2, ShieldAlert, Cpu, Settings, Info, Layers, Trash2, X } from 'lucide-react';
+import { BookOpen, Code, FileText, Send, Mic, MicOff, Volume2, VolumeX, CheckCircle, HelpCircle, Award, BarChart2, ShieldAlert, Cpu, Settings, Info, Layers, Trash2, X, Brain, Clock } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import { Subject, User, ChatSession, ChatMessage, Assessment, Assignment, StudentRecord } from '../../types';
 
@@ -46,8 +46,10 @@ export default function StudentDashboard({ user, subject }: StudentDashboardProp
   const recognitionRef = useRef<any>(null);
   
   // AI Voice State
-  const [voiceEngineMode, setVoiceEngineMode] = useState<'smiley' | 'robotic'>('smiley');
+  const [voiceEngineMode, setVoiceEngineMode] = useState<'smiley' | 'robotic'>('robotic');
   const [voiceAccent, setVoiceAccent] = useState<'andhra' | 'neutral' | 'american'>('andhra');
+  const [availableVoices, setAvailableVoices] = useState<SpeechSynthesisVoice[]>([]);
+  const [selectedBrowserVoice, setSelectedBrowserVoice] = useState<string>('');
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const mediaRecorderRef = useRef<any>(null);
   const audioChunksRef = useRef<Blob[]>([]);
@@ -67,6 +69,39 @@ export default function StudentDashboard({ user, subject }: StudentDashboardProp
 
   // 4. Records States
   const [record, setRecord] = useState<StudentRecord | null>(null);
+
+  // 5. Chat Scroll Ref
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  };
+
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages]);
+
+  useEffect(() => {
+    const loadVoices = () => {
+      if (window.speechSynthesis) {
+        const allVoices = window.speechSynthesis.getVoices();
+        const indianVoices = allVoices.filter(v => 
+          v.lang.toLowerCase().includes('in') || 
+          v.name.toLowerCase().includes('aarti') ||
+          v.name.toLowerCase().includes('arti') ||
+          v.name.toLowerCase().includes('neerja') ||
+          v.name.toLowerCase().includes('heera') ||
+          v.name.toLowerCase().includes('veena') ||
+          v.name.toLowerCase().includes('hindi')
+        );
+        setAvailableVoices(indianVoices.length > 0 ? indianVoices : allVoices);
+      }
+    };
+    loadVoices();
+    if (window.speechSynthesis) {
+      window.speechSynthesis.onvoiceschanged = loadVoices;
+    }
+  }, []);
 
   // Dynamic greeting generator using local system time and a random set of introductions
   const getInitialGreetingMessage = (sid: string = ""): ChatMessage => {
@@ -173,7 +208,8 @@ export default function StudentDashboard({ user, subject }: StudentDashboardProp
 
   const fetchStudentRecords = async () => {
     try {
-      const recRes = await fetch(`/v1/students/${user.id}/subjects/${subject.id}/record`);
+      // Add cache-busting timestamp to ensure fresh records after submission
+      const recRes = await fetch(`/v1/students/${user.id}/subjects/${subject.id}/record?t=${Date.now()}`);
       if (recRes.ok) {
         const recData = await recRes.json();
         setRecord(recData);
@@ -185,9 +221,9 @@ export default function StudentDashboard({ user, subject }: StudentDashboardProp
 
   const fetchStudentProfile = async () => {
     try {
-      setProfileName(user.name);
-      setProfileEmail(user.email);
-      setProfileRollNo(`AP-2026-${1000 + parseInt(user.id.replace(/\D/g, '') || '7')}`);
+      setProfileName(user?.name || '');
+      setProfileEmail(user?.email || '');
+      setProfileRollNo(`AP-2026-${1000 + parseInt(user?.id?.replace(/\D/g, '') || '7')}`);
       setProfileGrade('Grade 10');
       setProfileBoard('AP State Board (SSC)');
       setProfileBio('Keen student exploring mathematics, science, and computer science courses via personalized SmilAI mentoring.');
@@ -337,6 +373,7 @@ export default function StudentDashboard({ user, subject }: StudentDashboardProp
     if (window.speechSynthesis) window.speechSynthesis.cancel();
     if (audioRef.current) {
       audioRef.current.pause();
+      audioRef.current.currentTime = 0;
       audioRef.current = null;
     }
     setIsSpeaking(false);
@@ -380,17 +417,23 @@ export default function StudentDashboard({ user, subject }: StudentDashboardProp
       const voices = window.speechSynthesis.getVoices();
       let selectedVoice = null;
       
-      const preferredNames = [
-        'microsoft neerja', 'veena', 'google hi-in english female', 
-        'google हिन्दी', 'microsoft heera', 'google uk english female',
-        'microsoft zira', 'samantha'
-      ];
+      if (selectedBrowserVoice) {
+        selectedVoice = voices.find(v => v.voiceURI === selectedBrowserVoice);
+      }
       
-      for (const name of preferredNames) {
-        const match = voices.find(v => v.name.toLowerCase().includes(name));
-        if (match) {
-          selectedVoice = match;
-          break;
+      if (!selectedVoice) {
+        const preferredNames = [
+          'microsoft aarti', 'aarti', 'arti', 'microsoft neerja', 'veena', 'google hi-in english female', 
+          'google हिन्दी', 'microsoft heera', 'google uk english female',
+          'microsoft zira', 'samantha'
+        ];
+        
+        for (const name of preferredNames) {
+          const match = voices.find(v => v.name.toLowerCase().includes(name));
+          if (match) {
+            selectedVoice = match;
+            break;
+          }
         }
       }
       
@@ -423,12 +466,12 @@ export default function StudentDashboard({ user, subject }: StudentDashboardProp
   };
 
   // 1. Chat actions
-  const handleSendMessage = async (e?: React.FormEvent) => {
+  const handleSendMessage = async (e?: React.FormEvent, customText?: string) => {
     if (e) e.preventDefault();
-    if (!inputMsg.trim() || loading) return;
+    const userText = customText || inputMsg;
+    if (!userText.trim() || loading) return;
 
     setError('');
-    const userText = inputMsg;
     setInputMsg('');
     setLoading(true);
 
@@ -441,13 +484,21 @@ export default function StudentDashboard({ user, subject }: StudentDashboardProp
       timestamp: new Date().toISOString()
     };
     
-    // Create empty placeholder for assistant's streaming response
+    const intros = [
+      "Let me search our subject documents to find the best answer...",
+      "One moment, I am retrieving the reference textbook content...",
+      "Hmm, let me search my syllabus files for that...",
+      "Give me just a second to lookup the relevant facts in our curriculum..."
+    ];
+    const randomFiller = intros[Math.floor(Math.random() * intros.length)];
+
+    // Create placeholder for assistant's streaming response with the temporary filler text
     const assistantMsgId = `ast-${Date.now()}`;
     const placeholderAssistantMsg: ChatMessage = {
       id: assistantMsgId,
       sessionId: currentSessionId,
       role: 'assistant',
-      content: '',
+      content: `_${randomFiller}_`,
       timestamp: new Date().toISOString()
     };
     
@@ -755,6 +806,11 @@ export default function StudentDashboard({ user, subject }: StudentDashboardProp
                       <button
                         onClick={() => {
                           if (window.speechSynthesis) window.speechSynthesis.cancel();
+                          if (audioRef.current) {
+                            audioRef.current.pause();
+                            audioRef.current.currentTime = 0;
+                            audioRef.current = null;
+                          }
                           setIsSpeaking(false);
                         }}
                         className="px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-red-600 bg-red-50 hover:bg-red-100 border border-red-200 rounded-full cursor-pointer transition-colors"
@@ -767,8 +823,13 @@ export default function StudentDashboard({ user, subject }: StudentDashboardProp
                   {/* TTS Toggle */}
                   <button
                     onClick={() => {
-                      if (speechEnabled && window.speechSynthesis) {
-                        window.speechSynthesis.cancel();
+                      if (speechEnabled) {
+                        if (window.speechSynthesis) window.speechSynthesis.cancel();
+                        if (audioRef.current) {
+                          audioRef.current.pause();
+                          audioRef.current.currentTime = 0;
+                          audioRef.current = null;
+                        }
                         setIsSpeaking(false);
                       }
                       setSpeechEnabled(!speechEnabled);
@@ -844,6 +905,7 @@ export default function StudentDashboard({ user, subject }: StudentDashboardProp
                     </div>
                   ))
                 )}
+                <div ref={messagesEndRef} />
                 {loading && (
                   <div className="flex justify-start">
                     <div className="bg-slate-50 border border-slate-100 p-4 rounded-2xl rounded-tl-none max-w-md flex items-center gap-2">
@@ -877,8 +939,14 @@ export default function StudentDashboard({ user, subject }: StudentDashboardProp
                 </select>
               </div>
 
-              {/* Chat Composer Input */}
-              <form onSubmit={handleSendMessage} className="p-4 border-t border-slate-100 flex items-center gap-2 bg-slate-50/20 shrink-0">
+              {/* Chat Composer Input - Isolated to prevent typing lag and IME issues */}
+              <form 
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  handleSendMessage();
+                }} 
+                className="p-4 border-t border-slate-100 flex items-center gap-2 bg-slate-50/20 shrink-0"
+              >
                 <input
                   type="text"
                   value={inputMsg}
@@ -886,6 +954,8 @@ export default function StudentDashboard({ user, subject }: StudentDashboardProp
                   placeholder={`Ask a question on ${subject.name}...`}
                   className="flex-1 bg-white border border-slate-200 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
                   id="student-chat-input"
+                  autoComplete="off"
+                  spellCheck="false"
                 />
                 
                 {/* Voice Input Button */}
@@ -1276,10 +1346,10 @@ export default function StudentDashboard({ user, subject }: StudentDashboardProp
                 {/* Avatar and Info */}
                 <div className="flex items-center gap-4 mb-6">
                   <div className="h-14 w-14 rounded-full bg-white/10 border border-white/20 flex items-center justify-center font-bold text-lg text-teal-100 uppercase">
-                    {profileName ? profileName.slice(0, 2) : user.name.slice(0, 2)}
+                    {(profileName || user?.name || "St").slice(0, 2)}
                   </div>
                   <div>
-                    <div className="text-lg font-bold">{profileName || user.name}</div>
+                    <div className="text-lg font-bold">{profileName || user?.name || "Student"}</div>
                     <div className="text-xs text-indigo-200 mt-0.5 font-medium tracking-wider">Active Enrollment</div>
                   </div>
                 </div>
@@ -1303,7 +1373,7 @@ export default function StudentDashboard({ user, subject }: StudentDashboardProp
 
                   <div className="pt-1 text-xs">
                     <span className="text-indigo-200 text-[10px] font-bold uppercase tracking-wider block">Institution Mail</span>
-                    <span className="font-semibold font-mono">{profileEmail || user.email}</span>
+                    <span className="font-semibold font-mono">{profileEmail || user?.email || "N/A"}</span>
                   </div>
                 </div>
               </div>
@@ -1351,19 +1421,48 @@ export default function StudentDashboard({ user, subject }: StudentDashboardProp
                     </div>
                   </div>
                   
-                  <div className="flex items-center justify-between p-4 rounded-xl border border-slate-100 hover:bg-slate-50 transition-colors cursor-pointer" onClick={() => setVoiceEngineMode('robotic')}>
-                    <div className="flex items-center gap-3">
-                      <div className={`p-2 rounded-lg ${voiceEngineMode === 'robotic' ? 'bg-slate-200 text-slate-700' : 'bg-slate-100 text-slate-400'}`}>
-                        <Cpu className="h-5 w-5" />
+                  <div className="flex flex-col">
+                    <div className={`flex items-center justify-between p-4 border border-slate-100 hover:bg-slate-50 transition-colors cursor-pointer ${voiceEngineMode === 'robotic' ? 'rounded-t-xl border-b-0' : 'rounded-xl'}`} onClick={() => setVoiceEngineMode('robotic')}>
+                      <div className="flex items-center gap-3">
+                        <div className={`p-2 rounded-lg ${voiceEngineMode === 'robotic' ? 'bg-slate-200 text-slate-700' : 'bg-slate-100 text-slate-400'}`}>
+                          <Cpu className="h-5 w-5" />
+                        </div>
+                        <div>
+                          <div className="font-bold text-slate-800 text-sm">Native Indian Voice (Zero Latency)</div>
+                          <div className="text-xs text-slate-500 mt-0.5">Uses Microsoft Aarti or built-in OS Indian voices.</div>
+                        </div>
                       </div>
-                      <div>
-                        <div className="font-bold text-slate-800 text-sm">Robotic Voice (Basic Browser)</div>
-                        <div className="text-xs text-slate-500 mt-0.5">Standard OS-level fallback TTS engine.</div>
+                      <div className={`h-5 w-5 rounded-full border-2 flex items-center justify-center ${voiceEngineMode === 'robotic' ? 'border-slate-500' : 'border-slate-300'}`}>
+                        {voiceEngineMode === 'robotic' && <div className="h-2.5 w-2.5 rounded-full bg-slate-500" />}
                       </div>
                     </div>
-                    <div className={`h-5 w-5 rounded-full border-2 flex items-center justify-center ${voiceEngineMode === 'robotic' ? 'border-slate-500' : 'border-slate-300'}`}>
-                      {voiceEngineMode === 'robotic' && <div className="h-2.5 w-2.5 rounded-full bg-slate-500" />}
-                    </div>
+                    {voiceEngineMode === 'robotic' && (
+                      <div className="p-4 bg-slate-50 border border-t-0 border-slate-100 rounded-b-xl border-x-slate-100">
+                        <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2 block">Select Specific OS Voice</label>
+                        <select 
+                          value={selectedBrowserVoice} 
+                          onChange={(e) => setSelectedBrowserVoice(e.target.value)}
+                          className="w-full bg-white border border-slate-200 rounded-lg p-2 text-xs focus:ring-2 focus:ring-teal-500 outline-none text-slate-700 font-medium"
+                        >
+                          <option value="">Auto-Detect Best Indian Voice</option>
+                          {availableVoices.map(v => {
+                            let displayName = v.name;
+                            if (displayName.toLowerCase().includes('aarti')) displayName = 'Aarti (Indian English)';
+                            else if (displayName.toLowerCase().includes('neerja')) displayName = 'Neerja (Indian English)';
+                            else if (displayName.toLowerCase().includes('heera')) displayName = 'Heera (Indian English)';
+                            else if (displayName.toLowerCase().includes('veena')) displayName = 'Veena (Indian English)';
+                            else if (displayName.toLowerCase().includes('swara')) displayName = 'Swara (Hindi)';
+                            else displayName = displayName.replace(/(Microsoft |Google |Online |\(Natural\) |Desktop |- English \(India\)|- Hindi \(India\))/gi, '').trim();
+                            
+                            return (
+                              <option key={v.voiceURI} value={v.voiceURI}>
+                                {displayName}
+                              </option>
+                            );
+                          })}
+                        </select>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>

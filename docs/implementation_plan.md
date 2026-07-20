@@ -23,6 +23,13 @@ Thank you for the answers! Based on your feedback, here are my recommendations a
 
 ---
 
+## Open Questions (Answered)
+
+1. **Translation Engine**: We will use the provided **IndicTrans2 (AI4Bharat)** offline engine using the `IndicTransToolkit` script methodology you provided. It is 100% offline and highly accurate for Indian languages.
+2. **OCR Status**: OCR is **not** currently implemented. `app/language/ocr.py` is currently stubbed with a `NotImplementedError`. OCR for scanned textbook ingestion is scheduled for Phase 6.
+
+---
+
 ## 3. Development Phases & Timeline
 
 ### Phase 1: Python FastAPI & Auth Engine (Days 1 - 3)
@@ -64,11 +71,19 @@ Thank you for the answers! Based on your feedback, here are my recommendations a
 
 ### Phase 7: Frontend AI Wiring & Aesthetics (Days 22 - 25)
 *Goal: Make the UI feel alive and actively talk to our Python AI engine.*
-- [ ] **Student Dashboard Chat**: Build/Update the React chat components to correctly process the `StreamingResponse` from our FastAPI `/v1/chat/stream` endpoint.
-- [ ] **Voice Interface**: Wire up microphone record buttons to hit `/v1/voice/transcribe` and `/v1/voice/speak` so students can talk to Smiley.
-- [ ] **Premium UI Aesthetics**: Apply the requested "Rich Aesthetics" (Glassmorphism, Dark Mode, Micro-animations) to make the UI look premium.
+- [x] **Student Dashboard Chat**: Build/Update the React chat components to correctly process the `StreamingResponse` from our FastAPI `/v1/chat/stream` endpoint.
+- [x] **Voice Interface**: Wire up microphone record buttons to hit `/v1/voice/transcribe` and `/v1/voice/speak` so students can talk to Smiley.
+- [x] **Premium UI Aesthetics**: Apply the requested "Rich Aesthetics" (Glassmorphism, Dark Mode, Micro-animations) to make the UI look premium.
 
-## User Review Required
-> [!IMPORTANT]
-> **Phase 7 Approval:** Do you approve the plan for Phase 7? 
-> Also, your existing React repository has `TailwindCSS` installed. Should I keep using Tailwind to style the UI, or strictly strip it out and use **Vanilla CSS** as mentioned in your original web app rules?
+### Phase 7.5: QA Bug Fixes (Day 26)
+*Goal: Address critical and medium bugs identified in v1.4.0 browser QA to ensure a stable demo.*
+- [ ] **Fix Student Profile tab crash**: Add optional chaining and fallback values (`user?.name`, `user?.email`) in `StudentDashboard.tsx` to prevent `undefined` runtime errors when rendering the digital passport.
+- [ ] **Fix Student Learning Progress history**: Add cache-busting headers or force React state invalidation in `fetchStudentRecords()` inside `StudentDashboard.tsx` so that history reliably updates immediately after a quiz submission.
+- [ ] **Fix Chat text input handling**: Stabilize the `onChange` event binding for the chat input field to prevent lost keystrokes or lag during synthetic browser events.
+
+### Phase 8: Multi-Language Support (In Progress)
+*Goal: Ensure SmilAI can support students in multiple Indian languages using the offline IndicTrans2 engine.*
+- [ ] **Language Toggle**: Update frontend UI to include a global language selection dropdown (English, Hindi, Telugu, etc.).
+- [ ] **IndicTrans2 Backend Integration**: Adapt the provided `04_translate_segments_any_language.py` logic into a reusable `TranslationProvider` in FastAPI.
+- [ ] **Translate-RAG-Translate Pipeline**: Update `/v1/chat/stream` to detect if the user's language is not English. If so, translate User Query -> English, run RAG, and stream-translate the English Response -> Native Language.
+- [ ] **Regional STT/TTS**: Ensure the STT (`lang` prop) and TTS engines correctly map to the user's selected regional language.

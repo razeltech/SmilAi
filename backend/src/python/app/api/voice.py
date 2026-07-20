@@ -66,17 +66,17 @@ def initialize_tts_engine():
                 if free_mem > 2 * 1024 * 1024 * 1024:
                     from parler_tts import ParlerTTSForConditionalGeneration
                     from transformers import AutoTokenizer
-                    logger.info("GPU detected with >2GB VRAM. Loading ai4bharat/indic-parler-tts locally...")
-                    # Enforce local_files_only=True to prevent internet downloads
-                    parler_model = ParlerTTSForConditionalGeneration.from_pretrained("ai4bharat/indic-parler-tts", local_files_only=True).to("cuda")
-                    parler_tokenizer = AutoTokenizer.from_pretrained("ai4bharat/indic-parler-tts", local_files_only=True)
+                    logger.info("GPU detected with >2GB VRAM. Loading ai4bharat/indic-parler-tts locally (will download if missing)...")
+                    # Set local_files_only=False to allow initial download for the RTX 3060
+                    parler_model = ParlerTTSForConditionalGeneration.from_pretrained("ai4bharat/indic-parler-tts", local_files_only=False).to("cuda")
+                    parler_tokenizer = AutoTokenizer.from_pretrained("ai4bharat/indic-parler-tts", local_files_only=False)
                     logger.info("Indic Parler-TTS loaded successfully on GPU.")
                 else:
                     logger.warning(f"Not enough VRAM for Parler-TTS (Free: {free_mem/(1024**3):.2f}GB). Falling back to Piper.")
             else:
                 logger.warning("No GPU detected for Parler-TTS. Skipping to fallback.")
-        except OSError: # Huggingface raises OSError if local_files_only=True and not found
-            logger.warning("Parler-TTS models not found locally. Please run Offline Installer.")
+        except OSError: 
+            logger.warning("Parler-TTS models failed to load or download.")
             parler_model = None
             parler_tokenizer = None
         except Exception as e:

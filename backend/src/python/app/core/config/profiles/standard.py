@@ -3,7 +3,7 @@ from ..base import DeploymentProfile
 standard_profile = DeploymentProfile(
     whisper_model="base.en",
     embedding_model="BAAI/bge-small-en-v1.5", 
-    llm_model="qwen2.5:7b",
+    llm_model="qwen2.5:7b-instruct",
     tts_engine="parler",
     
     enable_voice=True,
