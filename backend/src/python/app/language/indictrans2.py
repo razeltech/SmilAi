@@ -27,12 +27,15 @@ class IndicTransProvider:
     Standalone Translation Provider using IndicTrans2 (1B).
     Manages VRAM aggressively by keeping only one directional model in GPU memory at a time.
     """
-    
-    # Model Hub IDs
+    # Model Hub IDs / Local Directory Names
     MODELS = {
         "en-indic": "ai4bharat/indictrans2-en-indic-1B",
         "indic-en": "ai4bharat/indictrans2-indic-en-1B"
     }
+
+    # Local Offline Directory Base
+    import os
+    OFFLINE_MODEL_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..', 'models', 'indictrans2'))
 
     # Primary 13 Supported Languages Mapping for IndicTrans2 in SmilAI
     LANG_MAP = {
@@ -130,8 +133,14 @@ class IndicTransProvider:
                 from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
                 from IndicTransToolkit import IndicProcessor
                 
-                model_id = self.MODELS[direction]
-                logger.info(f"Loading IndicTrans2 ({direction}) onto {self.device}...")
+                # Check for offline model directory first
+                local_path = os.path.join(self.OFFLINE_MODEL_DIR, direction)
+                if os.path.exists(local_path) and os.listdir(local_path):
+                    model_id = local_path
+                    logger.info(f"Loading IndicTrans2 ({direction}) from LOCAL OFFLINE directory: {model_id}...")
+                else:
+                    model_id = self.MODELS[direction]
+                    logger.info(f"Loading IndicTrans2 ({direction}) from HuggingFace Hub: {model_id}...")
                 
                 self.processor = IndicProcessor(inference=True)
                 self.tokenizer = AutoTokenizer.from_pretrained(model_id, trust_remote_code=True)
