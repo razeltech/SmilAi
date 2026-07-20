@@ -64,9 +64,9 @@ async def extract_text_from_upload(file: UploadFile) -> str:
                     logger.info(f"Page text sparse ({len(text)} chars). Attempting OCR fallback...")
                     pix = page.get_pixmap(dpi=150) # Render page to image
                     img_bytes = pix.tobytes("png")
-                    ocr_text = ocr_provider.extract_text(img_bytes)
-                    if ocr_text:
-                        text = (text + "\n" + ocr_text).strip()
+                    ocr_result = ocr_provider.extract_text(img_bytes)
+                    if ocr_result and ocr_result.text:
+                        text = (text + "\n" + ocr_result.text).strip()
                         
                 full_text.append(text)
                 
@@ -76,8 +76,8 @@ async def extract_text_from_upload(file: UploadFile) -> str:
             
     elif filename.endswith(".png") or filename.endswith(".jpg") or filename.endswith(".jpeg"):
         logger.info(f"Direct image upload detected: {filename}. Running OCR...")
-        text = ocr_provider.extract_text(content_bytes)
-        return text
+        ocr_result = ocr_provider.extract_text(content_bytes)
+        return ocr_result.text
             
     elif filename.endswith(".docx"):
         try:

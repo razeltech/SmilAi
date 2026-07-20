@@ -68,15 +68,16 @@ def process_and_ingest_pdf(pdf_bytes: bytes, filename: str, org_id: str, subject
                 from ..language.ocr import ocr_provider
                 pix = page.get_pixmap(dpi=150)
                 img_bytes = pix.tobytes("png")
-                ocr_text = ocr_provider.extract_text(img_bytes)
-                if ocr_text:
-                    text = (text + "\n" + ocr_text).strip()
+                ocr_result = ocr_provider.extract_text(img_bytes)
+                if ocr_result and ocr_result.text:
+                    text = (text + "\n" + ocr_result.text).strip()
                     
             full_text += text + "\n\n"
             
     elif filename_lower.endswith((".png", ".jpg", ".jpeg")):
         from ..language.ocr import ocr_provider
-        full_text = ocr_provider.extract_text(pdf_bytes)
+        ocr_result = ocr_provider.extract_text(pdf_bytes)
+        full_text = ocr_result.text
         
     else:
         raise ValueError(f"Unsupported file format: {filename}")
