@@ -2,7 +2,7 @@ import io
 import logging
 import threading
 from dataclasses import dataclass, field
-from typing import List
+from typing import List, Any
 from PIL import Image, UnidentifiedImageError
 import numpy as np
 
@@ -10,7 +10,7 @@ import numpy as np
 class OCRBlock:
     text: str
     confidence: float
-    bbox: list
+    bbox: List[Any]
 
 @dataclass
 class OCRResult:
@@ -156,10 +156,15 @@ class OCRProvider:
                 import torch
                 has_gpu = torch.cuda.is_available()
                 
+            img_w = image.width if 'image' in locals() else "Unknown"
+            img_h = image.height if 'image' in locals() else "Unknown"
+            size_mb = len(image_data) / (1024 * 1024)
+                
             logger.error(
                 f"OCR extraction failed\n"
                 f"Engine: EasyOCR\n"
                 f"GPU: {has_gpu}\n"
+                f"Image: {img_w}x{img_h} ({size_mb:.2f} MB)\n"
                 f"Exception: {e}"
             )
             return OCRResult(text="", average_confidence=0.0, blocks=[], engine="easyocr", preprocessing=False)
