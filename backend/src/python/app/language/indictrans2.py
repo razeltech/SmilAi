@@ -19,7 +19,8 @@ class TranslationResult:
     direction: str
 
 # Requirement: pip install indictranstoolkit transformers>=4.51 torch
-DEFAULT_MAX_NEW_TOKENS = 512
+TOKENIZER_MAX_LENGTH = 512
+GENERATION_MAX_NEW_TOKENS = 512
 
 class IndicTransProvider:
     """
@@ -33,7 +34,7 @@ class IndicTransProvider:
         "indic-en": "ai4bharat/indictrans2-indic-en-1B"
     }
 
-    # Complete 22+ Languages Mapping for IndicTrans2
+    # Primary 13 Supported Languages Mapping for IndicTrans2 in SmilAI
     LANG_MAP = {
         "en": "eng_Latn",
         "hi": "hin_Deva",
@@ -72,28 +73,32 @@ class IndicTransProvider:
             
         self._lock = threading.Lock()
 
+    def _unload_locked(self):
+        """Internal method to unload the active model. Assumes lock is already held."""
+        if self.model:
+            logger.info(f"Unloading model {self.current_direction} from {self.device} to free memory...")
+            del self.model
+            del self.tokenizer
+            del self.processor
+            self.model = None
+            self.tokenizer = None
+            self.processor = None
+            self.current_direction = None
+            self.status = "idle"
+            
+            if self.device == "cuda":
+                import torch
+                import gc
+                alloc_before = torch.cuda.memory_allocated() / (1024**2)
+                gc.collect()
+                torch.cuda.empty_cache()
+                alloc_after = torch.cuda.memory_allocated() / (1024**2)
+                logger.info(f"VRAM freed: {alloc_before:.2f} MB -> {alloc_after:.2f} MB")
+
     def unload(self):
         """Unload the active model and clear GPU cache to free VRAM."""
         with self._lock:
-            if self.model:
-                logger.info(f"Unloading model {self.current_direction} from {self.device} to free memory...")
-                del self.model
-                del self.tokenizer
-                del self.processor
-                self.model = None
-                self.tokenizer = None
-                self.processor = None
-                self.current_direction = None
-                self.status = "idle"
-                
-                if self.device == "cuda":
-                    import torch
-                    import gc
-                    alloc_before = torch.cuda.memory_allocated() / (1024**2)
-                    gc.collect()
-                    torch.cuda.empty_cache()
-                    alloc_after = torch.cuda.memory_allocated() / (1024**2)
-                    logger.info(f"VRAM freed: {alloc_before:.2f} MB -> {alloc_after:.2f} MB")
+            self._unload_locked()
 
     def _get_direction(self, source_language: str, target_language: str) -> str:
         """Determines the required directional model."""
@@ -117,7 +122,7 @@ class IndicTransProvider:
             # Unload existing model if it's different
             if self.model is not None:
                 logger.info(f"Swapping models: unloading {self.current_direction}")
-                self.unload()
+                self._unload_locked()
                     
             try:
                 self.status = "loading"
@@ -233,7 +238,7 @@ class IndicTransProvider:
                     batch_text, 
                     padding="longest", 
                     truncation=True, 
-                    max_length=DEFAULT_MAX_NEW_TOKENS, 
+                    max_length=TOKENIZER_MAX_LENGTH, 
                     return_tensors="pt"
                 ).to(self.device)
                 
@@ -241,7 +246,7 @@ class IndicTransProvider:
                     **inputs,
                     use_cache=True,
                     num_beams=5,
-                    max_length=DEFAULT_MAX_NEW_TOKENS
+                    max_length=GENERATION_MAX_NEW_TOKENS
                 )
                 
                 decoded = self.tokenizer.batch_decode(outputs, skip_special_tokens=True)

@@ -63,5 +63,11 @@ def run_tests():
     res_invalid = translation_provider.translate("Bonjour", "fr", "en")
     print_result("Test 6: Invalid Language Pair", res_invalid)
 
+    # 7. Repeated Translations (Caching & Latency Check)
+    print("\nExecuting Repeated Translations (Cache Test)...")
+    for i in range(4):
+        res_rep = translation_provider.translate(f"This is repeated sentence number {i+1}.", "en", "te")
+        print(f"  [Rep {i+1}] Latency: {res_rep.latency_ms:.2f} ms | Text: {res_rep.translated_text[:30]}...")
+
 if __name__ == "__main__":
     run_tests()
