@@ -18,6 +18,9 @@ class TranslationResult:
     device: str
     direction: str
 
+# Requirement: pip install indictranstoolkit transformers>=4.51 torch
+DEFAULT_MAX_NEW_TOKENS = 512
+
 class IndicTransProvider:
     """
     Standalone Translation Provider using IndicTrans2 (1B).
@@ -30,19 +33,30 @@ class IndicTransProvider:
         "indic-en": "ai4bharat/indictrans2-indic-en-1B"
     }
 
-    # ISO Language Maps for IndicTrans2 tokenization
+    # Complete 22+ Languages Mapping for IndicTrans2
     LANG_MAP = {
         "en": "eng_Latn",
+        "hi": "hin_Deva",
         "te": "tel_Telu",
-        "hi": "hin_Deva"
+        "ta": "tam_Taml",
+        "ml": "mal_Mlym",
+        "kn": "kan_Knda",
+        "mr": "mar_Deva",
+        "gu": "guj_Gujr",
+        "pa": "pan_Guru",
+        "bn": "ben_Beng",
+        "or": "ory_Orya",
+        "as": "asm_Beng",
+        "ur": "urd_Arab"
     }
 
     def __init__(self):
         self.tokenizer = None
         self.model = None
+        self.processor = None
         
         self.current_direction = None
-        self.initialization_attempted = False
+        self.status = "idle"
         
         # Determine optimal device
         import sys
@@ -65,15 +79,29 @@ class IndicTransProvider:
                 logger.info(f"Unloading model {self.current_direction} from {self.device} to free memory...")
                 del self.model
                 del self.tokenizer
+                del self.processor
                 self.model = None
                 self.tokenizer = None
+                self.processor = None
                 self.current_direction = None
+                self.status = "idle"
                 
                 if self.device == "cuda":
                     import torch
                     import gc
+                    alloc_before = torch.cuda.memory_allocated() / (1024**2)
                     gc.collect()
                     torch.cuda.empty_cache()
+                    alloc_after = torch.cuda.memory_allocated() / (1024**2)
+                    logger.info(f"VRAM freed: {alloc_before:.2f} MB -> {alloc_after:.2f} MB")
+
+    def _get_direction(self, source_language: str, target_language: str) -> str:
+        """Determines the required directional model."""
+        if source_language == "en" and target_language != "en":
+            return "en-indic"
+        elif source_language != "en" and target_language == "en":
+            return "indic-en"
+        return "invalid"
 
     def _load_model(self, direction: str):
         """Internal method to load a model. Unloads current model if a swap is needed."""
@@ -89,21 +117,18 @@ class IndicTransProvider:
             # Unload existing model if it's different
             if self.model is not None:
                 logger.info(f"Swapping models: unloading {self.current_direction}")
-                del self.model
-                del self.tokenizer
-                if self.device == "cuda":
-                    import torch
-                    import gc
-                    gc.collect()
-                    torch.cuda.empty_cache()
+                self.unload()
                     
             try:
+                self.status = "loading"
                 import torch
                 from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
+                from IndicTransToolkit import IndicProcessor
                 
                 model_id = self.MODELS[direction]
                 logger.info(f"Loading IndicTrans2 ({direction}) onto {self.device}...")
                 
+                self.processor = IndicProcessor(inference=True)
                 self.tokenizer = AutoTokenizer.from_pretrained(model_id, trust_remote_code=True)
                 # Load in fp16 if on CUDA to save memory
                 dtype = torch.float16 if self.device == "cuda" else torch.float32
@@ -116,34 +141,30 @@ class IndicTransProvider:
                 
                 self.model.eval()
                 self.current_direction = direction
-                self.initialization_attempted = True
+                self.status = "healthy"
                 logger.info(f"Successfully loaded {model_id}")
                 
             except Exception as e:
-                self.initialization_attempted = True
+                self.status = "error"
                 logger.error(f"Failed to load model {direction}: {e}")
                 self.model = None
                 self.tokenizer = None
+                self.processor = None
                 self.current_direction = None
                 raise
 
     def initialize(self):
-        """Pre-warms the provider with en-indic by default if nothing is loaded."""
-        if self.model is None and not self.initialization_attempted:
-            try:
-                self._load_model("en-indic")
-            except Exception:
-                pass # Exceptions logged in _load_model
+        """No preloading. Model will be loaded on the first request to save startup time."""
+        pass
 
     def health(self) -> Dict[str, Any]:
         models_loaded = [self.current_direction] if self.current_direction else []
         return {
-            "status": "healthy" if self.model else "uninitialized",
+            "status": self.status,
             "loaded_model": self.current_direction,
             "device": self.device,
             "models_loaded": models_loaded,
-            "cache_strategy": "single_gpu",
-            "initialization_attempted": self.initialization_attempted
+            "cache_strategy": "single_gpu"
         }
 
     def translate(self, text: str, source_language: str, target_language: str) -> TranslationResult:
@@ -177,11 +198,8 @@ class IndicTransProvider:
             )
 
         # Determine required direction
-        if source_language == "en" and target_language in ["te", "hi"]:
-            direction = "en-indic"
-        elif source_language in ["te", "hi"] and target_language == "en":
-            direction = "indic-en"
-        else:
+        direction = self._get_direction(source_language, target_language)
+        if direction == "invalid":
             return TranslationResult(
                 translated_text="",
                 source_language=source_language,
@@ -199,7 +217,7 @@ class IndicTransProvider:
             # Swap models if necessary
             self._load_model(direction)
             
-            if not self.model or not self.tokenizer:
+            if not self.model or not self.tokenizer or not self.processor:
                 raise RuntimeError("Model failed to load.")
                 
             src_lang_code = self.LANG_MAP[source_language]
@@ -207,21 +225,28 @@ class IndicTransProvider:
             
             import torch
             
-            with torch.no_grad():
-                # IndicTrans2 specific tokenization
-                batch = self.tokenizer(text, src=src_lang_code, return_tensors="pt")
-                batch = {k: v.to(self.device) for k, v in batch.items()}
+            with torch.inference_mode():
+                # IndicTransToolkit official preprocessing
+                batch_text = self.processor.preprocess_batch([text], src_lang=src_lang_code, tgt_lang=tgt_lang_code)
                 
-                generated_tokens = self.model.generate(
-                    **batch,
+                inputs = self.tokenizer(
+                    batch_text, 
+                    padding="longest", 
+                    truncation=True, 
+                    max_length=DEFAULT_MAX_NEW_TOKENS, 
+                    return_tensors="pt"
+                ).to(self.device)
+                
+                outputs = self.model.generate(
+                    **inputs,
                     use_cache=True,
-                    min_length=0,
-                    max_length=256,
                     num_beams=5,
-                    out_lang=tgt_lang_code
+                    max_length=DEFAULT_MAX_NEW_TOKENS
                 )
                 
-                translated_text = self.tokenizer.batch_decode(generated_tokens, skip_special_tokens=True)[0]
+                decoded = self.tokenizer.batch_decode(outputs, skip_special_tokens=True)
+                # Official postprocessing
+                translated_text = self.processor.postprocess_batch(decoded, lang=tgt_lang_code)[0]
                 
             latency_ms = (time.time() - start_time) * 1000
             
